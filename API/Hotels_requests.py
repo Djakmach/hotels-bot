@@ -3,7 +3,7 @@ import requests
 import json
 from typing import List
 
-import settings
+from API import settings
 
 
 class BaseRequest(ABC):
@@ -19,7 +19,7 @@ class BaseRequest(ABC):
     URL = ''
     QUERYSTRING = {}
     HEADERS = settings.HEADERS
-    _dict_destination_id = {}
+    _dict_destination_id = {'new york': '1506246', 'london': '549499', 'paris': "504261"}
 
     def _get_response(self):
         """
@@ -55,24 +55,11 @@ class LocationRequest(BaseRequest):
         if city in self._dict_destination_id:
             return self._dict_destination_id.get(city)
         else:
-            with open('destination_id.txt', 'r') as file_id:
-                destinations_id = json.load(file_id)
-                self._dict_destination_id.update(destinations_id)
-                for name_city, id in destinations_id.items():
-                    if name_city == city:
-                        destination_id = id
-                        self._dict_destination_id.update({city: id})
-                        break
-                else:
-                    self.QUERYSTRING.update({"query": city})
-                    response = self._get_response()
-                    data = json.loads(response.text)
-                    destination_id = data["suggestions"][0]["entities"][0]["destinationId"]
-                    self._dict_destination_id.update({city: destination_id})
-
-            with open('destination_id.txt', 'w') as file_id:
-                json.dump(self._dict_destination_id, file_id)
-
+            self.QUERYSTRING.update({"query": city})
+            response = self._get_response()
+            data = json.loads(response.text)
+            destination_id = data["suggestions"][0]["entities"][0]["destinationId"]
+            self._dict_destination_id.update({city: destination_id})
         return destination_id
 
     def __call__(self, city):
@@ -106,6 +93,7 @@ class BaseRequestsHotels(BaseRequest):
         """
         search_destination_id = LocationRequest()
         destination_id = search_destination_id(city)
+        print('получили локацию')
         return destination_id
 
     def photo_requests(self, hotel_id: str, amount_photo: int) -> List[str]:
@@ -118,9 +106,9 @@ class BaseRequestsHotels(BaseRequest):
         :rtype: list
         """
         photo_list = []
-        url_photo = "https://hotels4.p.rapidapi.com/properties/get-hotel-photos"
+        URL_PHOTO = settings.URL_PHOTO
         querystring = {"id": hotel_id}
-        response_photo = requests.request("GET", url_photo, headers=self.HEADERS, params=querystring)
+        response_photo = requests.request("GET", URL_PHOTO, headers=self.HEADERS, params=querystring)
         hotel_photos_json = json.loads(response_photo.text)
 
         counter = 0
@@ -130,10 +118,11 @@ class BaseRequestsHotels(BaseRequest):
             counter += 1
             if counter >= amount_photo:
                 break
+        print('выполнили запрос на получение фото')
         return photo_list
 
     @staticmethod
-    def _get_address(address_data: dict) -> str:   # нужен self или нет
+    def _get_address(address_data: dict) -> str:
 
         """
         Метод для получения адресса отеля, в удобном представлении для пользователя
@@ -166,6 +155,7 @@ class BaseRequestsHotels(BaseRequest):
                 address = ', '.join((address, extended_address))
             else:
                 address = extended_address
+        print('получили адрес')
         return address
 
     def _get_hotels(self, **kwargs) -> List[dict]:
@@ -187,6 +177,8 @@ class BaseRequestsHotels(BaseRequest):
         response = self._get_response()
 
         hotels_json = json.loads(response.text)
+        # with open('data_search_low_price.json', 'w') as low_price_file:
+        #     json.dump(hotels_json, low_price_file, indent=4)
 
         for hotel in hotels_json["data"]["body"]["searchResults"]["results"]:
             hotel_id = hotel.get("id")
@@ -195,7 +187,7 @@ class BaseRequestsHotels(BaseRequest):
             if address:
                 address = self._get_address(address)
             distance_to_center = hotel["landmarks"][0]["distance"]
-            price = hotel.get('ratePlan')["price"]["exactCurrent"]
+            price = hotel.get('ratePlan')["price"]["current"]
 
             hotel = {
                 'hotel_id': hotel_id,
@@ -210,6 +202,7 @@ class BaseRequestsHotels(BaseRequest):
                 hotel.update({'photo_hotel': photo_hotel})
 
             self.hotels_deal.append(hotel)
+        print('выполнился _get_hotels ' )
         return self.hotels_deal
 
     def __call__(self, **kwargs):
@@ -287,13 +280,13 @@ class BestDealRequest(BaseRequestsHotels):
 
         for hotel in hotels_json["data"]["body"]["searchResults"]["results"]:
             distance_to_center = hotel["landmarks"][0]["distance"]
-            price = hotel.get('ratePlan')["price"]["exactCurrent"]
             if self._check_distance_to_center(kwargs.get('max_distance'), distance_to_center):
                 hotel_id = hotel.get("id")
                 name_hotel = hotel.get("name")
                 address = hotel.get('address')
                 if address:
                     address = self._get_address(address)
+                price = hotel.get('ratePlan')["price"]["current"]
 
                 hotel = {
                     'hotel_id': hotel_id,
@@ -319,44 +312,44 @@ class RequestHandler:
         'best_deal': BestDealRequest,
     }
 
-    @classmethod
-    def __call__(cls, command: str = 'low_price', **kwargs):
-        object = cls._COMMANDS.get(command)()
-        return object(**kwargs)
+    def __call__(self, command: str = 'low_price', **kwargs):
+        object_request = self._COMMANDS.get(command)()
+        return object_request(**kwargs)
 
 
-# av = LocationRequest()
-# print(av('paris'))
-
-
-# low_price = RequestHandler()
-# param_low_price = {
-#     'city': 'london', "checkIn": '2020-01-08', "checkOut": "2020-01-15", 'amount_hotels': '4', 'photo_hotels': True,
-#     'amount_photo': 3
-# }
-# result = low_price(comand='low_price', **param_low_price)
-# with open('low.json', 'w') as file:
-#     file.write(json.dumps(result, indent=4))
-#
-#
-# high_price = RequestHandler()
-# param_high_price = {
-#     'city': 'london', "checkIn": '2020-01-08', "checkOut": "2020-01-15", 'amount_hotels': '3', 'photo_hotels': False,
-#     'amount_photo': 3
-# }
-# result = high_price(comand='high_price', **param_high_price)
-# with open('high.json', 'w') as file:
-#     file.write(json.dumps(result, indent=4))
-
-
-best_deal = RequestHandler()
-param_best_deal = {
-    'city': 'london', 'priceMin': 500, 'priceMax': 10000, "checkIn": '2020-01-08', "checkOut": "2020-01-15",
-    'max_distance': 0.7, 'amount_hotels': '3', 'photo_hotels': True, 'amount_photo': 3
-}
-result = best_deal(command='best_deal', **param_best_deal)
-with open('best_deal.json', 'w') as file:
-    file.write(json.dumps(result, indent=4))
+# if __name__ == '__main__':
+    # av = LocationRequest()
+    # print(av('paris'))
+    #
+    #
+    # low_price = RequestHandler()
+    # param_low_price = {
+    #     'city': 'london', "checkIn": '2020-01-08', "checkOut": "2020-01-15", 'amount_hotels': '4', 'photo_hotels': True,
+    #     'amount_photo': 3
+    # }
+    # result = low_price(comand='low_price', **param_low_price)
+    # with open('low.json', 'w') as file:
+    #     file.write(json.dumps(result, indent=4))
+    #
+    #
+    # high_price = RequestHandler()
+    # param_high_price = {
+    #     'city': 'london', "checkIn": '2020-01-08', "checkOut": "2020-01-15", 'amount_hotels': '3', 'photo_hotels': False,
+    #     'amount_photo': 3
+    # }
+    # result = high_price(comand='high_price', **param_high_price)
+    # with open('high.json', 'w') as file:
+    #     file.write(json.dumps(result, indent=4))
+    #
+    #
+    # best_deal = RequestHandler()
+    # param_best_deal = {
+    #     'city': 'london', 'priceMin': 500, 'priceMax': 10000, "checkIn": '2020-01-08', "checkOut": "2020-01-15",
+    #     'max_distance': 2, 'amount_hotels': '3', 'photo_hotels': True, 'amount_photo': 3
+    # }
+    # result = best_deal(command='best_deal', **param_best_deal)
+    # with open('best_deal.json', 'w') as file:
+    #     file.write(json.dumps(result, indent=4))
 
 
 
