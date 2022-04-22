@@ -1,6 +1,6 @@
 # параметры по умолчанию для поиска локации
 URL_LOCATION = "https://hotels4.p.rapidapi.com/locations/v2/search"
-QUERYSTRING_LOCATION = {"query": "new york", "locale": "en_US", "currency": "USD"}
+QUERYSTRING_LOCATION = {"query": "new york", "locale": "ru_RU", "currency": "RUB"}
 
 
 
@@ -16,9 +16,12 @@ QUERYSTRING_HOTELS = {
     "priceMin": '500',
     "priceMax": '10000',
     "sortOrder": "PRICE",
-    "locale": "en_US",
+    "locale": "ru_RU",
     "currency": "RUB"
 }
+
+URL_PHOTO = "https://hotels4.p.rapidapi.com/properties/get-hotel-photos"
+
 
 # общий параметр по умолчанию
 HEADERS = {
