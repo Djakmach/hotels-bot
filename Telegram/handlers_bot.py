@@ -1,12 +1,8 @@
-import json
-
-import telebot
 from telebot import types
 
 from API.Hotels_requests import RequestHandler
+from create_bot import bot
 
-
-bot = telebot.TeleBot('5263982663:AAH8yAgYnKUVz5_XP70AQxAAru8K7SSSrDU')
 
 
 param_low_price = {
@@ -19,14 +15,15 @@ param_low_price = {
     }
 
 
-@bot.message_handler(commands=['help'])
-def start(message):
+# @bot.message_handler(commands=['help'])
+def help(message):
     mess = 'Я бот предназначенный для поиска отелей\n\nВы можете управлять мной,\
     отправив следующие команды:\n\n/help\n/lowprice'
     bot.send_message(message.chat.id, mess)
 
 
-@bot.message_handler(commands=['lowprice'])
+
+
 def lowprice(message):
     bot.send_message(message.from_user.id, 'Введите город')
     bot.register_next_step_handler(message, getting_city)
@@ -116,5 +113,6 @@ def get_hotels(message):
 
 
 
-
-bot.polling(none_stop=True, )
+def register_handlers(bot):
+    bot.register_message_handler(help, commands=['help'])
+    bot.register_message_handler(lowprice, commands=['lowprice'])
