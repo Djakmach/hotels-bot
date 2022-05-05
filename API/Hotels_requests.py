@@ -57,10 +57,19 @@ class LocationRequest(BaseRequest):
         else:
             self.QUERYSTRING.update({"query": city})
             response = self._get_response()
-            data = json.loads(response.text)
-            destination_id = data["suggestions"][0]["entities"][0]["destinationId"]
-            self._dict_destination_id.update({city: destination_id})
-        return destination_id
+            try:
+                if response.ok:
+                    print('получение локации', response)
+                else:
+                    print('получение локации', response)
+                    raise ValueError
+            except ValueError:
+                pass
+            else:
+                data = json.loads(response.text)
+                destination_id = data["suggestions"][0]["entities"][0]["destinationId"]
+                self._dict_destination_id.update({city: destination_id})
+                return destination_id
 
     def __call__(self, city):
         return self.get_location(city)
@@ -93,7 +102,6 @@ class BaseRequestsHotels(BaseRequest):
         """
         search_destination_id = LocationRequest()
         destination_id = search_destination_id(city)
-        print('получили локацию')
         return destination_id
 
     def photo_requests(self, hotel_id: str, amount_photo: int) -> List[str]:
@@ -109,17 +117,25 @@ class BaseRequestsHotels(BaseRequest):
         URL_PHOTO = settings.URL_PHOTO
         querystring = {"id": hotel_id}
         response_photo = requests.request("GET", URL_PHOTO, headers=self.HEADERS, params=querystring)
-        hotel_photos_json = json.loads(response_photo.text)
+        try:
+            if response_photo.ok:
+                print('получение фото', response_photo)
+            else:
+                print('получение фото', response_photo)
+                raise ValueError
+        except ValueError:
+            pass
+        else:
+            hotel_photos_json = json.loads(response_photo.text)
 
-        counter = 0
-        for data_photo in hotel_photos_json["hotelImages"]:
-            photo_hotel = data_photo["baseUrl"].replace('{size}', 'z')
-            photo_list.append(photo_hotel)
-            counter += 1
-            if counter >= amount_photo:
-                break
-        print('выполнили запрос на получение фото')
-        return photo_list
+            counter = 0
+            for data_photo in hotel_photos_json["hotelImages"]:
+                photo_hotel = data_photo["baseUrl"].replace('{size}', 'z')
+                photo_list.append(photo_hotel)
+                counter += 1
+                if counter >= amount_photo:
+                    break
+            return photo_list
 
     @staticmethod
     def _get_address(address_data: dict) -> str:
@@ -155,7 +171,6 @@ class BaseRequestsHotels(BaseRequest):
                 address = ', '.join((address, extended_address))
             else:
                 address = extended_address
-        print('получили адрес')
         return address
 
     def _get_hotels(self, **kwargs) -> List[dict]:
@@ -175,35 +190,42 @@ class BaseRequestsHotels(BaseRequest):
                                  "checkIn": kwargs.get('checkIn'), "checkOut": kwargs.get('checkOut')})
 
         response = self._get_response()
+        try:
+            if response.ok:
+                print('поиск отелей', response)
+            else:
+                print('поиск отелей', response)
+                raise ValueError
+        except ValueError:
+            pass
+        else:
+            hotels_json = json.loads(response.text)
+            # with open('data_search_high_price.json', 'w') as low_price_file:
+            #     json.dump(hotels_json, low_price_file, indent=4)
+            for hotel in hotels_json["data"]["body"]["searchResults"]["results"]:
+                hotel_id = hotel.get("id")
+                name_hotel = hotel.get("name")
+                address = hotel.get('address')
+                if address:
+                    address = self._get_address(address)
+                distance_to_center = hotel["landmarks"][0]["distance"]
+                price = hotel.get('ratePlan')["price"]["current"]
 
-        hotels_json = json.loads(response.text)
-        # with open('data_search_low_price.json', 'w') as low_price_file:
-        #     json.dump(hotels_json, low_price_file, indent=4)
+                hotel = {
+                    'hotel_id': hotel_id,
+                    'name_hotel': name_hotel,
+                    'adress': address,
+                    'distance_to_center': distance_to_center,
+                    'price': price,
+                }
 
-        for hotel in hotels_json["data"]["body"]["searchResults"]["results"]:
-            hotel_id = hotel.get("id")
-            name_hotel = hotel.get("name")
-            address = hotel.get('address')
-            if address:
-                address = self._get_address(address)
-            distance_to_center = hotel["landmarks"][0]["distance"]
-            price = hotel.get('ratePlan')["price"]["current"]
+                if kwargs.get('photo_hotels'):
+                    photo_hotel = self.photo_requests(hotel_id, kwargs.get('amount_photo'))
+                    hotel.update({'photo_hotel': photo_hotel})
 
-            hotel = {
-                'hotel_id': hotel_id,
-                'name_hotel': name_hotel,
-                'adress': address,
-                'distance_to_center': distance_to_center,
-                'price': price,
-            }
-
-            if kwargs.get('photo_hotels'):
-                photo_hotel = self.photo_requests(hotel_id, kwargs.get('amount_photo'))
-                hotel.update({'photo_hotel': photo_hotel})
-
-            self.hotels_deal.append(hotel)
-        print('выполнился _get_hotels ' )
-        return self.hotels_deal
+                self.hotels_deal.append(hotel)
+            print('Полученные данные об отелях: ', self.hotels_deal)
+            return self.hotels_deal
 
     def __call__(self, **kwargs):
         return self._get_hotels(**kwargs)
@@ -242,7 +264,7 @@ class BestDealRequest(BaseRequestsHotels):
         :param max_distance: максимальное расстояние до центра которое удовлетворяет запросу пользователя
         :return: True если расстояние меньше или равно, False если расстояние больше допустимого
         """
-        distance = float(distance.split()[0])
+        distance = float(distance.split()[0].replace(',', '.'))
         if distance <= max_distance:
             return True
         else:
@@ -273,36 +295,45 @@ class BestDealRequest(BaseRequestsHotels):
                                 )
         amount_hotels = int(kwargs.get('amount_hotels'))
         response = self._get_response()
+        try:
+            if response.ok:
+                print('поиск отелей', response)
+            else:
+                print('поиск отелей', response)
+                raise ValueError
+        except ValueError:
+            pass
+        else:
+            hotels_json = json.loads(response.text)
+            # with open('data_search_best_deal.json', 'w') as best_deal_file:
+            #     json.dump(hotels_json, best_deal_file, indent=4)
+            for hotel in hotels_json["data"]["body"]["searchResults"]["results"]:
+                distance_to_center = hotel["landmarks"][0]["distance"]
+                if self._check_distance_to_center(kwargs.get('max_distance'), distance_to_center):
+                    hotel_id = hotel.get("id")
+                    name_hotel = hotel.get("name")
+                    address = hotel.get('address')
+                    if address:
+                        address = self._get_address(address)
+                    price = hotel.get('ratePlan')["price"]["current"]
 
-        hotels_json = json.loads(response.text)
-        with open('data_search_best_deal.json', 'w') as best_deal_file:
-            json.dump(hotels_json, best_deal_file, indent=4)
+                    hotel = {
+                        'hotel_id': hotel_id,
+                        'name_hotel': name_hotel,
+                        'adress': address,
+                        'distance_to_center': distance_to_center,
+                        'price': price,
+                    }
+                    if kwargs.get('photo_hotels'):
+                        photo_hotel = self.photo_requests(hotel_id, kwargs.get('amount_photo'))
+                        hotel.update({'photo_hotel': photo_hotel})
 
-        for hotel in hotels_json["data"]["body"]["searchResults"]["results"]:
-            distance_to_center = hotel["landmarks"][0]["distance"]
-            if self._check_distance_to_center(kwargs.get('max_distance'), distance_to_center):
-                hotel_id = hotel.get("id")
-                name_hotel = hotel.get("name")
-                address = hotel.get('address')
-                if address:
-                    address = self._get_address(address)
-                price = hotel.get('ratePlan')["price"]["current"]
-
-                hotel = {
-                    'hotel_id': hotel_id,
-                    'name_hotel': name_hotel,
-                    'adress': address,
-                    'distance_to_center': distance_to_center,
-                    'price': price,
-                }
-                if kwargs.get('photo_hotels'):
-                    photo_hotel = self.photo_requests(hotel_id, kwargs.get('amount_photo'))
-                    hotel.update({'photo_hotel': photo_hotel})
-
-                self.hotels_deal.append(hotel)
-                if len(self.hotels_deal) >= amount_hotels:
-                    break
-        return self.hotels_deal
+                    self.hotels_deal.append(hotel)
+                    if len(self.hotels_deal) >= amount_hotels:
+                        break
+            print('выполнился _get_hotels')
+            print(self.hotels_deal)
+            return self.hotels_deal
 
 
 class RequestHandler:
@@ -324,20 +355,28 @@ class RequestHandler:
     #
     # low_price = RequestHandler()
     # param_low_price = {
-    #     'city': 'london', "checkIn": '2020-01-08', "checkOut": "2020-01-15", 'amount_hotels': '4', 'photo_hotels': True,
+    #     'city': 'london',
+    #     "checkIn": '2022-04-27',
+    #     "checkOut": "2022-04-28",
+    #     'amount_hotels': '2',
+    #     'photo_hotels': False,
     #     'amount_photo': 3
     # }
-    # result = low_price(comand='low_price', **param_low_price)
+    # result = low_price(command='low_price', **param_low_price)
     # with open('low.json', 'w') as file:
     #     file.write(json.dumps(result, indent=4))
     #
     #
     # high_price = RequestHandler()
     # param_high_price = {
-    #     'city': 'london', "checkIn": '2020-01-08', "checkOut": "2020-01-15", 'amount_hotels': '3', 'photo_hotels': False,
-    #     'amount_photo': 3
-    # }
-    # result = high_price(comand='high_price', **param_high_price)
+    #         'city': 'london',
+    #         "checkIn": '2022-04-27',
+    #         "checkOut": "2022-04-28",
+    #         'amount_hotels': '2',
+    #         'photo_hotels': False,
+    #         'amount_photo': 3
+    #     }
+    # result = high_price(command='high_price', **param_high_price)
     # with open('high.json', 'w') as file:
     #     file.write(json.dumps(result, indent=4))
     #
