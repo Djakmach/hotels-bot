@@ -1,11 +1,16 @@
 import datetime
 
 from telebot import types
+from loguru import logger
+
 
 from API.Hotels_requests import RequestHandler
 from create_bot import bot
 from DataBase import db_for_history
+from DataBase.db_for_history import db
 
+
+# db = db_for_history.DB()
 
 class BaseHandler:
     param_request = {
@@ -69,44 +74,22 @@ class BaseHandler:
             bot.send_message(message.from_user.id, 'Ошибка ввода, введите "да" или "нет"')
             bot.register_next_step_handler(message, self.getting_photo_hotels)
 
-    # def getting_amount_hotels(self, message):
-    #     amount_hotels = message.text
-    #     try:
-    #         if 1 <= int(amount_hotels) <= 10:
-    #             self.param_request.update({'amount_hotels': amount_hotels})
-    #         else:
-    #             raise ValueError
-    #     except ValueError:
-    #         bot.send_message(message.from_user.id, 'Ошибка ввода, введите число от 1 до 10')
-    #         bot.register_next_step_handler(message, self.getting_amount_hotels)
-    #     else:
-    #         keyboard = types.InlineKeyboardMarkup()  # наша клавиатура
-    #         key_yes = types.InlineKeyboardButton(text='Да', callback_data='yes')
-    #         keyboard.add(key_yes)  # добавляем кнопку в клавиатуру
-    #         key_no = types.InlineKeyboardButton(text='Нет', callback_data='no')
-    #         keyboard.add(key_no)
-    #         bot.send_message(message.from_user.id, text='Предоставить фото?', reply_markup=keyboard)
-    #
-    # @bot.callback_query_handler(func=lambda call: True)
-    # def callback_worker(self, call):
-    #     if call.data == "yes":
-    #         self.param_request.update({'photo_hotels': True})
-    #         bot.send_message(call.message.chat.id, 'Сколько вывести фотографий?)')
-    #         bot.register_next_step_handler(call.message, self.getting_amount_photo)
-    #     elif call.data == "no":
-    #         self.param_request.update({'photo_hotels': False})
-    #         self.get_hotels(call.message)
-
     def getting_amount_photo(self, message):
-        amount_photo = int(message.text)
-        self.param_request.update({'amount_photo': amount_photo})
-        self.get_hotels(message)
+        try:
+            amount_photo = int(message.text)
+            self.param_request.update({'amount_photo': amount_photo})
+            self.get_hotels(message)
+        except ValueError:
+            bot.send_message(message.from_user.id, 'Ошибка ввода, повторите ввод')
+            bot.register_next_step_handler(message, self.getting_amount_photo)
+
+
 
     def get_data(self):
+        logger.info(f'Параметры запроса пользователя: {self.param_request}')
         object_request = RequestHandler()
-        print('Параметры запроса пользователя: ', self.param_request)
         data_hotels = object_request(command=self.command, **self.param_request)
-        self.history(data_hotels)
+
         return data_hotels
 
     def history(self, data_hotels):
@@ -114,25 +97,27 @@ class BaseHandler:
         data_request = {'command': self.command,
                         'data_time': dt.strftime("%x %X"),
                         'hotels': ', '.join([name.get('name_hotel') for name in data_hotels])}
-        db_for_history.add_note_in_history(data_request)
+        db.add_note_in_history(data_request)
 
     def get_hotels(self, message):
-
         data_hotels = self.get_data()
-        for data_hotel in data_hotels:
-            result = ''
-            result += ''.join(('Название отеля: ', data_hotel.get('name_hotel')))
-            result += ''.join(('\nАдрес отеля: ', data_hotel.get('adress')))
-            result += ''.join(('\nРасстояние до центра города: ', data_hotel.get('distance_to_center')))
-            result += ''.join(('\nОбщая стоимость проживания: ', data_hotel.get('price')))
-            bot.send_message(message.from_user.id, result)
-            photo = data_hotel.get('photo_hotel')
-            if photo:
-                media = []
-                for reference in photo:
-                    media.append(types.InputMediaPhoto(reference))
-                bot.send_media_group(message.chat.id, media)
-
+        if data_hotels:
+            for data_hotel in data_hotels:
+                result = ''
+                result += ''.join(('Название отеля: ', data_hotel.get('name_hotel')))
+                result += ''.join(('\nАдрес отеля: ', data_hotel.get('adress')))
+                result += ''.join(('\nРасстояние до центра города: ', data_hotel.get('distance_to_center')))
+                result += ''.join(('\nОбщая стоимость проживания: ', data_hotel.get('price')))
+                bot.send_message(message.from_user.id, result)
+                photo = data_hotel.get('photo_hotel')
+                if photo:
+                    media = []
+                    for reference in photo:
+                        media.append(types.InputMediaPhoto(reference))
+                    bot.send_media_group(message.chat.id, media)
+            self.history(data_hotels)
+        else:
+            bot.send_message(message.from_user.id, 'По вашему запросу ничего не найдено')
 
 class Help:
     def __call__(self, message):
@@ -208,7 +193,7 @@ class BestDeal(BaseHandler):
 
 class History:
     def __call__(self, message):
-        db_for_history.show_history(message)
+        db.show_history(message)
 
 
 def register_handlers(bot):
