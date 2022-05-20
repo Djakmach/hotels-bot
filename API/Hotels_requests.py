@@ -6,9 +6,9 @@ import re
 
 from loguru import logger
 
-from API import settings
+from config_data import config
 
-logger.add('debug.log', level='DEBUG')               #что такое level?
+logger.add('debug.log', level='DEBUG')               # TODO что такое level?
 
 class BaseRequest(ABC):
     """ Базовый класс всех запросов
@@ -20,9 +20,9 @@ class BaseRequest(ABC):
         QUERYSTRING (dict): парметры запроса
         HEADERS (dict): словарь заголовков HTTP для отправки
     """
-    URL = ''
-    QUERYSTRING = {}
-    HEADERS = settings.HEADERS
+    url = ''
+    querystring = {}
+    headers = {"X-RapidAPI-Host": "hotels4.p.rapidapi.com", "X-RapidAPI-Key": config.RAPID_API_KEY}
 
     def get_response(self, url, querystring):
         """
@@ -32,7 +32,7 @@ class BaseRequest(ABC):
         """
 
         try:
-            response = requests.request("GET", url=url, headers=self.HEADERS, params=querystring, timeout=10)
+            response = requests.request("GET", url=url, headers=self.headers, params=querystring, timeout=10)
             if response.status_code == requests.codes.ok:
                 return response
         except requests.exceptions.ReadTimeout:
@@ -48,8 +48,9 @@ class LocationRequest(BaseRequest):
         HEADERS (dict): словарь заголовков HTTP для отправки, берется из файла settings.py
     """
 
-    URL = settings.URL_LOCATION
-    QUERYSTRING = settings.QUERYSTRING_LOCATION
+    url = "https://hotels4.p.rapidapi.com/locations/v2/search"
+    querystring = {"query": "new york", "locale": "ru_RU", "currency": "RUB"}
+
     _dict_destination_id = {'new york': '1506246', 'london': '549499', 'paris': "504261"}
 
 
@@ -65,8 +66,8 @@ class LocationRequest(BaseRequest):
         if city in self._dict_destination_id:
             destination_id = self._dict_destination_id.get(city)
         else:
-            self.QUERYSTRING.update({"query": city})
-            response = self.get_response(self.URL, self.QUERYSTRING)
+            self.querystring.update({"query": city})
+            response = self.get_response(self.url, self.querystring)
             pattern_destination = r'(?<="CITY_GROUP",).+?[\]]'
             find = re.search(pattern_destination, response.text)
             if find:
@@ -95,8 +96,21 @@ class BaseRequestsHotels(BaseRequest):
 
     """
     def __init__(self):
-        self.URL = settings.URL_HOTELS
-        self.QUERYSTRING = settings.QUERYSTRING_HOTELS
+        self.url = "https://hotels4.p.rapidapi.com/properties/list"
+        self.querystring = {
+            "destinationId": "1506246",
+            "pageNumber": "1",
+            "pageSize": "25",
+            "checkIn": "2020-01-08",
+            "checkOut": "2020-01-15",
+            "adults1": "1",
+            "priceMin": '500',
+            "priceMax": '10000',
+            "sortOrder": "PRICE",
+            "locale": "ru_RU",
+            "currency": "RUB"
+        }
+
         self.hotels_deal = []
 
     @staticmethod
@@ -123,9 +137,9 @@ class BaseRequestsHotels(BaseRequest):
         :rtype: list
         """
         photo_list = []
-        URL_PHOTO = settings.URL_PHOTO
+        url_photo = "https://hotels4.p.rapidapi.com/properties/get-hotel-photos"
         querystring = {"id": hotel_id}
-        response_photo = self.get_response(URL_PHOTO, querystring)
+        response_photo = self.get_response(url_photo, querystring)
 
         pattern_photo = r'(?<=,"hotelImages":).+?(?=,"roomImages)'
         find = re.search(pattern_photo, response_photo.text)
@@ -184,12 +198,12 @@ class BaseRequestsHotels(BaseRequest):
 
     def update_param(self, **kwargs):
         destination_id = self.location_request(kwargs.get('city'))
-        self.QUERYSTRING.update({"destinationId": destination_id,
+        self.querystring.update({"destinationId": destination_id,
                                  "checkIn": kwargs.get('checkIn'),
                                  "checkOut": kwargs.get('checkOut')})
 
     def request_hotels(self):
-        response_hotels = self.get_response(self.URL, self.QUERYSTRING)
+        response_hotels = self.get_response(self.url, self.querystring)
         pattern_hotels = r'(?<=,"results":).+?(?=,"pagination)'
         find = re.search(pattern_hotels, response_hotels.text)
         if find:
@@ -235,7 +249,7 @@ class BaseRequestsHotels(BaseRequest):
             'amount_photo' (int): кол-во фото отеля
         """
         self.update_param(**kwargs)
-        self.QUERYSTRING.update({"pageSize": kwargs.get('amount_hotels')})
+        self.querystring.update({"pageSize": kwargs.get('amount_hotels')})
 
         hotels_json = self.request_hotels()
 
@@ -258,7 +272,7 @@ class LowPriceRequest(BaseRequestsHotels):
     """
     def __init__(self):
         super().__init__()
-        self.QUERYSTRING.update({"sortOrder": "PRICE"})
+        self.querystring.update({"sortOrder": "PRICE"})
 
 
 class HighPriceRequest(BaseRequestsHotels):
@@ -267,7 +281,7 @@ class HighPriceRequest(BaseRequestsHotels):
     """
     def __init__(self):
         super().__init__()
-        self.QUERYSTRING.update({"sortOrder": "PRICE_HIGHEST_FIRST"})
+        self.querystring.update({"sortOrder": "PRICE_HIGHEST_FIRST"})
 
 
 class BestDealRequest(BaseRequestsHotels):
@@ -276,7 +290,7 @@ class BestDealRequest(BaseRequestsHotels):
     """
     def __init__(self):
         super().__init__()
-        self.QUERYSTRING.update({"sortOrder": "DISTANCE_FROM_LANDMARK", "landmarkIds": "City center"})
+        self.querystring.update({"sortOrder": "DISTANCE_FROM_LANDMARK", "landmarkIds": "City center"})
 
     @staticmethod
     def _check_distance_to_center(max_distance, distance: str) -> bool:
@@ -307,7 +321,7 @@ class BestDealRequest(BaseRequestsHotels):
             'amount_photo' (int): кол-во фото отеля
         """
         self.update_param(**kwargs)
-        self.QUERYSTRING.update({"priceMin": kwargs.get('priceMin'),
+        self.querystring.update({"priceMin": kwargs.get('priceMin'),
                                  "priceMax": kwargs.get('priceMax'),
                                  "pageSize": "25"})
         amount_hotels = int(kwargs.get('amount_hotels'))
