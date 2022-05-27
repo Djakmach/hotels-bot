@@ -33,6 +33,7 @@ class BaseRequest(ABC):
 
         try:
             response = requests.request("GET", url=url, headers=self.headers, params=querystring, timeout=10)
+            requests.get()
             if response.status_code == requests.codes.ok:
                 return response
         except requests.exceptions.ReadTimeout:

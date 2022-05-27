@@ -77,6 +77,11 @@ class BaseHandler:
     def getting_amount_photo(self, message):
         try:
             amount_photo = int(message.text)
+            if amount_photo <= 0:
+                bot.send_message(message.from_user.id, 'Ошибка ввода, повторите ввод')
+                bot.register_next_step_handler(message, self.getting_amount_photo)
+            elif amount_photo > 5:
+                amount_photo = 5
             self.param_request.update({'amount_photo': amount_photo})
             self.get_hotels(message)
         except ValueError:
@@ -197,7 +202,7 @@ class History:
 
 
 def register_handlers(bot):
-    bot.register_message_handler(Help(), commands=['help'])
+    bot.register_message_handler(Help(), commands=['help', 'start'])
     bot.register_message_handler(LowPrice(), commands=['lowprice'])
     bot.register_message_handler(HighPrice(), commands=['highprice'])
     bot.register_message_handler(BestDeal(), commands=['bestdeal'])

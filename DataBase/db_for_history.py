@@ -13,12 +13,12 @@ class DB:
         if self.data_base:
             logger.info('Соединение с базой данных уставновленно')
         self.data_base.execute('CREATE TABLE IF NOT EXISTS history(id INTEGER PRIMARY KEY AUTOINCREMENT, command TEXT, date_time DATETIME, hotels TEXT)')
-        self.data_base.commit()
+        # self.data_base.commit()
 
     def add_note_in_history(self, data_request):
         # self.cursor.execute('INSERT INTO history(command, date_time, hotels) VALUES (?, ?, ?)', tuple(data_request.values()))
         self.cursor.execute('INSERT INTO history VALUES (NULL, ?, ?, ?)', tuple(data_request.values()))
-        self.data_base.commit()
+        # self.data_base.commit()
 
 
     def show_history(self, message):

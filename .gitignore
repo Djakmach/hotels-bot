@@ -2,11 +2,13 @@
 .idea/
 /debug.log
 .env
+/test.py
+/test_2.py
 
 /API/__pycache__/
 
 /DataBase/__pycache__/
 /DataBase/data_base.db
 
-/Telegram/test.py
 /Telegram/__pycache__/
+
