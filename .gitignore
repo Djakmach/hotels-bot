@@ -12,3 +12,5 @@
 
 /Telegram/__pycache__/
 
+/Telegram/handlers_bot_2.py
+/states/param_request.py

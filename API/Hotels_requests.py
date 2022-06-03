@@ -13,12 +13,10 @@ logger.add('debug.log', level='DEBUG')               # TODO что такое le
 class BaseRequest(ABC):
     """ Базовый класс всех запросов
 
-    _dict_destination_id (dict): словарь с id городов
-
     Attributes:
-        URL (str): url - адресс запроса
-        QUERYSTRING (dict): парметры запроса
-        HEADERS (dict): словарь заголовков HTTP для отправки
+        url (str): url - адресс запроса
+        querystring (dict): парметры запроса
+        headers (dict): словарь заголовков HTTP для отправки
     """
     url = ''
     querystring = {}
@@ -33,7 +31,6 @@ class BaseRequest(ABC):
 
         try:
             response = requests.request("GET", url=url, headers=self.headers, params=querystring, timeout=10)
-            requests.get()
             if response.status_code == requests.codes.ok:
                 return response
         except requests.exceptions.ReadTimeout:
@@ -41,43 +38,37 @@ class BaseRequest(ABC):
 
 
 class LocationRequest(BaseRequest):
-    """ Клласс для запроса локации
+    """ Клласс для запроса локации, унаследован от BaseRequest
 
     Attributes:
-        URL (str): url - адресс запроса, берется из файла settings.py
-        QUERYSTRING (dict): парметры запроса, берется из файла settings.py
-        HEADERS (dict): словарь заголовков HTTP для отправки, берется из файла settings.py
+        url (str): url - адресс запроса, берется из файла settings.py
+        querystring (dict): парметры запроса, берется из файла settings.py
+        headers (dict): словарь заголовков HTTP для отправки, берется из файла settings.py
     """
 
     url = "https://hotels4.p.rapidapi.com/locations/v2/search"
     querystring = {"query": "new york", "locale": "ru_RU", "currency": "RUB"}
-
-    _dict_destination_id = {'new york': '1506246', 'london': '549499', 'paris': "504261"}
 
 
     def get_location(self, city) -> Optional[str]:
         """
         Метод для получения id города
 
-        :param city: город
+        :param city: город по которому ищем id локации
 
         :return: destination_id - id города
         :rtype destination_id: str
         """
-        if city in self._dict_destination_id:
-            destination_id = self._dict_destination_id.get(city)
+        self.querystring.update({"query": city})
+        response = self.get_response(self.url, self.querystring)
+        pattern_destination = r'(?<="CITY_GROUP",).+?[\]]'
+        find = re.search(pattern_destination, response.text)
+        if find:
+            data = json.loads(f"{{{find[0]}}}")
+            destination_id = data["entities"][0]["destinationId"]
         else:
-            self.querystring.update({"query": city})
-            response = self.get_response(self.url, self.querystring)
-            pattern_destination = r'(?<="CITY_GROUP",).+?[\]]'
-            find = re.search(pattern_destination, response.text)
-            if find:
-                data = json.loads(f"{{{find[0]}}}")
-                destination_id = data["entities"][0]["destinationId"]
-                self._dict_destination_id.update({city: destination_id})
-            else:
-                logger.exception('нет данных')
-                return
+            logger.exception('нет данных')
+            return
         logger.info(f'получили id города: {destination_id}')
         return destination_id
 
@@ -90,9 +81,9 @@ class BaseRequestsHotels(BaseRequest):
     Базовый класс запросов отелей
 
     Args:
-        URL (str): url - адресс запроса, берется из файла settings.py
-        QUERYSTRING (dict): парметры запроса, берется из файла settings.py
-        HEADERS (dict): словарь заголовков HTTP для отправки, берется из файла settings.py
+        url (str): url - адресс запроса, берется из файла settings.py
+        querystring (dict): парметры запроса, берется из файла settings.py
+        headers (dict): словарь заголовков HTTP для отправки, берется из файла settings.py
         hotels_deal (list): будущий список отелей, выводимых по текущему запросу
 
     """
@@ -134,10 +125,10 @@ class BaseRequestsHotels(BaseRequest):
 
         :param hotel_id: id отеля
         :param amount_photo: кол-во необходимых фотографий данного отеля
-        :return: photo_list
+        :return: photos
         :rtype: list
         """
-        photo_list = []
+        photos = []
         url_photo = "https://hotels4.p.rapidapi.com/properties/get-hotel-photos"
         querystring = {"id": hotel_id}
         response_photo = self.get_response(url_photo, querystring)
@@ -151,12 +142,12 @@ class BaseRequestsHotels(BaseRequest):
             for data_photo in hotel_photos_json:
 
                 photo_hotel = data_photo["baseUrl"].replace('{size}', 'z')
-                photo_list.append(photo_hotel)
+                photos.append(photo_hotel)
                 counter += 1
                 if counter >= amount_photo:
                     break
 
-            return photo_list
+            return photos
         else:
             logger.info('фотограйий нет')
             return
@@ -246,7 +237,7 @@ class BaseRequestsHotels(BaseRequest):
             'checkIn' (str): дата заезда
             'checkOut' (str): дата отъезда
             'amount_hotels' (str): кол-во отелей
-            'photo_hotels' (bool): надо ли показать фото
+            'is_photo_needed' (bool): надо ли показать фото
             'amount_photo' (int): кол-во фото отеля
         """
         self.update_param(**kwargs)
@@ -255,7 +246,7 @@ class BaseRequestsHotels(BaseRequest):
         hotels_json = self.request_hotels()
 
         for data_hotel in hotels_json:
-            converted_hotel = self.converter_data_hotels(data_hotel, kwargs.get('photo_hotels'),
+            converted_hotel = self.converter_data_hotels(data_hotel, kwargs.get('is_photo_needed'),
                                                          kwargs.get('amount_photo'))
 
             self.hotels_deal.append(converted_hotel)
@@ -318,7 +309,7 @@ class BestDealRequest(BaseRequestsHotels):
             'checkOut' (str): дата отъезда
             'max_distance' (float): максимальная удаленность от центра
             'amount_hotels' (str): кол-во отелей
-            'photo_hotels' (bool): надо ли показать фото
+            'is_photo_needed' (bool): надо ли показать фото
             'amount_photo' (int): кол-во фото отеля
         """
         self.update_param(**kwargs)
@@ -333,7 +324,7 @@ class BestDealRequest(BaseRequestsHotels):
 
                 distance_to_center = data_hotel["landmarks"][0]["distance"]
                 if self._check_distance_to_center(kwargs.get('max_distance'), distance_to_center):
-                    converted_hotel = self.converter_data_hotels(data_hotel, kwargs.get('photo_hotels'),
+                    converted_hotel = self.converter_data_hotels(data_hotel, kwargs.get('is_photo_needed'),
                                                                  kwargs.get('amount_photo'))
 
                     self.hotels_deal.append(converted_hotel)
@@ -358,53 +349,3 @@ class RequestHandler:
         object_request = self._COMMANDS.get(command)()
         return object_request(**kwargs)
 
-
-
-
-# if __name__ == '__main__':
-
-    # low_price = RequestHandler()
-    # param_low_price = {
-    #     'city': 'london',
-    #     "checkIn": '2022-04-27',
-    #     "checkOut": "2022-04-28",
-    #     'amount_hotels': '2',
-    #     'photo_hotels': False,
-    #     'amount_photo': 3
-    # }
-    # result = low_price(command='low_price', **param_low_price)
-    # with open('low.json', 'w') as file:
-    #     file.write(json.dumps(result, indent=4))
-    #
-    #
-    # high_price = RequestHandler()
-    # param_high_price = {
-    #         'city': 'london',
-    #         "checkIn": '2022-04-27',
-    #         "checkOut": "2022-04-28",
-    #         'amount_hotels': '2',
-    #         'photo_hotels': False,
-    #         'amount_photo': 3
-    #     }
-    # result = high_price(command='high_price', **param_high_price)
-    # with open('high.json', 'w') as file:
-    #     file.write(json.dumps(result, indent=4))
-    #
-    #
-    # best_deal = RequestHandler()
-    # param_best_deal = {
-    #     'city': 'london', 'priceMin': 500, 'priceMax': 10000, "checkIn": '2020-01-08', "checkOut": "2020-01-15",
-    #     'max_distance': 2, 'amount_hotels': '3', 'photo_hotels': True, 'amount_photo': 3
-    # }
-    # result = best_deal(command='best_deal', **param_best_deal)
-    # with open('best_deal.json', 'w') as file:
-    #     file.write(json.dumps(result, indent=4))
-
-
-
-
-
-
-# {'new york': '1506246'}
-# {'london': '549499'}
-# {'paris': "504261"}
