@@ -2,7 +2,9 @@ from create_bot import bot
 from Telegram import handlers_bot
 from DataBase.db_for_history import db
 from keyboards import inlinekeyboards
+from telebot.custom_filters import StateFilter
 
+bot.add_custom_filter(StateFilter(bot))
 
 # подключение обработчика команд
 handlers_bot.register_handlers()

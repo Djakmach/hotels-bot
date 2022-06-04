@@ -1,29 +1,19 @@
 from datetime import datetime, date
 
-from telebot.types import InputMediaPhoto, Message, CallbackQuery
+from telebot.types import InputMediaPhoto, Message
 from loguru import logger
 
 
-from API.Hotels_requests import RequestHandler
 from create_bot import bot
-from DataBase.db_for_history import db
-from keyboards.inlinekeyboards import calendar_days, callback_date
 from states.param_request import UserParamRequestState
-
-
-# class UserParamRequest:
-#
-#     city: str = None
-#     check_in: date = None
-#     check_out: date = None
-#     amount_hotels: int = None
-#     is_photo_needed: bool = None
-#     amount_photo: int = None
+from keyboards.inlinekeyboards import calendar_days
+from API.Hotels_requests import RequestHandler
+from DataBase.db_for_history import db
 
 
 class BaseHandler:
 
-
+    command = None
 
     param_request = {
         'city': 'london',
@@ -33,32 +23,34 @@ class BaseHandler:
         'is_photo_needed': True,
         'amount_photo': 3
     }
-    command = None
 
     def __call__(self, message: Message) -> None:
-        bot.set_state(user_id=message.from_user.id, state=UserParamRequestState.city, chat_id=message.chat.id)
-        bot.send_message(message.from_user.id, 'Введите город')
+        bot.send_message(message.chat.id, 'Введите город')
         bot.register_next_step_handler(message, self.getting_city)
 
-    def getting_city(self, message: Message):
+    def getting_city(self, message):
         city = message.text.lower()
         self.param_request.update({'city': city})
-        current_date = date.today()
-        bot.send_message(message.from_user.id, 'Выберите дату заезда', reply_markup=calendar_days(current_date))
+        cur_date = date.today()
+        bot.send_message(message.from_user.id, 'Выбирете дату заезда', reply_markup=calendar_days(cur_date))
+        # TODO register_next_step_handler жидает от МЕНЯ ввода сообщения, а моя клавиатура выводит сама сообщение из-за
+        #  этого пока я в ручную не ввиду он не будет дальше идти, как это сделать?
         bot.register_next_step_handler(message, self.getting_check_in)
 
-    def getting_check_in(self, message: Message):
-        self.param_request.update({'checkIn': message.text})
-        current_date = date.today()
-        bot.send_message(message.from_user.id, 'Введите дату выезда', reply_markup=calendar_days(current_date))
+    def getting_check_in(self, message):
+        check_in = message.text
+        self.param_request.update({'checkIn': check_in})
+        cur_date = date.today()
+        bot.send_message(message.from_user.id, 'Выбирете дату выезда', reply_markup=calendar_days(cur_date))
         bot.register_next_step_handler(message, self.getting_check_out)
 
-    def getting_check_out(self, message: Message):
-        self.param_request.update({'checkOut': message.text})
-        message = bot.send_message(message.from_user.id, 'Введите кол-во отелей (не больше 10)')
+    def getting_check_out(self, message):
+        check_out = message.text
+        self.param_request.update({'checkOut': check_out})
+        bot.send_message(message.from_user.id, 'Введите кол-во отелей (не больше 10)')
         bot.register_next_step_handler(message, self.getting_amount_hotels)
 
-    def getting_amount_hotels(self, message: Message):
+    def getting_amount_hotels(self, message):
         amount_hotels = message.text
         try:
             if 1 <= int(amount_hotels) <= 10:
@@ -71,15 +63,15 @@ class BaseHandler:
             bot.send_message(message.from_user.id, 'Ошибка ввода, введите число от 1 до 10')
             bot.register_next_step_handler(message, self.getting_amount_hotels)
 
-    def getting_photo_hotels(self, message: Message):
+    def getting_photo_hotels(self, message):
         answer = message.text
         try:
             if answer == 'да':
-                self.param_request.update({'is_photo_needed': True})
+                self.param_request.update({'photo_hotels': True})
                 bot.send_message(message.from_user.id, 'Сколько вывести фотографий?')
                 bot.register_next_step_handler(message, self.getting_amount_photo)
             elif answer == 'нет':
-                self.param_request.update({'is_photo_needed': False})
+                self.param_request.update({'photo_hotels': False})
                 self.get_hotels(message)
             else:
                 raise ValueError
@@ -87,20 +79,14 @@ class BaseHandler:
             bot.send_message(message.from_user.id, 'Ошибка ввода, введите "да" или "нет"')
             bot.register_next_step_handler(message, self.getting_photo_hotels)
 
-    def getting_amount_photo(self, message: Message):
+    def getting_amount_photo(self, message):
         try:
             amount_photo = int(message.text)
-            if amount_photo <= 0:
-                bot.send_message(message.from_user.id, 'Ошибка ввода, повторите ввод')
-                bot.register_next_step_handler(message, self.getting_amount_photo)
-            elif amount_photo > 5:
-                amount_photo = 5
             self.param_request.update({'amount_photo': amount_photo})
             self.get_hotels(message)
         except ValueError:
             bot.send_message(message.from_user.id, 'Ошибка ввода, повторите ввод')
             bot.register_next_step_handler(message, self.getting_amount_photo)
-
 
     def get_data(self):
         logger.info(f'Параметры запроса пользователя: {self.param_request}')
@@ -116,7 +102,7 @@ class BaseHandler:
                         'hotels': ', '.join([name.get('name_hotel') for name in data_hotels])}
         db.add_note_in_history(data_request)
 
-    def get_hotels(self, message: Message):
+    def get_hotels(self, message):
         data_hotels = self.get_data()
         if data_hotels:
             for data_hotel in data_hotels:
@@ -135,6 +121,7 @@ class BaseHandler:
             self.history(data_hotels)
         else:
             bot.send_message(message.from_user.id, 'По вашему запросу ничего не найдено')
+
 
 class Help:
     def __call__(self, message: Message):
@@ -165,7 +152,6 @@ class BestDeal(BaseHandler):
         'amount_photo': 3
     }
     command = 'best_deal'
-
 
     def getting_check_out(self, message: Message):
         check_out = message.text
@@ -214,7 +200,6 @@ class History:
         db.show_history(message)
 
 
-# def register_handlers(bot):
 def register_handlers():
     bot.register_message_handler(Help(), commands=['help', 'start'])
     bot.register_message_handler(LowPrice(), commands=['lowprice'])

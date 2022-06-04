@@ -116,7 +116,7 @@ def callback_date(call: CallbackQuery) -> date | None:
         bot.edit_message_text(text=f'Вы выбрали {call.data[-10:]}', chat_id=call.message.chat.id,
                               message_id=call.message.id)
         bot.answer_callback_query(call.id)
-        return user_choice
+        return user_choice                         # TODO вот после этого места нужно как то перейти к вводу следующего параметра
 
 
 def callback_dates_month(call: CallbackQuery) -> None:
