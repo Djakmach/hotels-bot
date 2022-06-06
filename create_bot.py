@@ -1,4 +1,9 @@
-import telebot
+from telebot import TeleBot, StateMemoryStorage
+from config_data import config
 
 
-bot = telebot.TeleBot('5263982663:AAH8yAgYnKUVz5_XP70AQxAAru8K7SSSrDU')
+state_storage = StateMemoryStorage()
+# создаем экземпляр бота
+bot = TeleBot(token=config.BOT_TOKEN, state_storage=state_storage)
+
+

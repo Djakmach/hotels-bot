@@ -1,42 +1,47 @@
-import datetime
+from datetime import datetime, date
 
-from telebot import types
+from telebot.types import InputMediaPhoto, Message
 from loguru import logger
 
 
-from API.Hotels_requests import RequestHandler
 from create_bot import bot
-from DataBase import db_for_history
+from states.param_request import UserParamRequestState
+from keyboards.inlinekeyboards import calendar_days
+from API.Hotels_requests import RequestHandler
 from DataBase.db_for_history import db
 
 
-# db = db_for_history.DB()
-
 class BaseHandler:
+
+    command = None
+
     param_request = {
         'city': 'london',
         "checkIn": '2020-01-08',
         "checkOut": "2020-01-15",
         'amount_hotels': '4',
-        'photo_hotels': True,
+        'is_photo_needed': True,
         'amount_photo': 3
     }
-    command = None
 
-    def __call__(self, message):
+    def __call__(self, message: Message) -> None:
         bot.send_message(message.chat.id, 'Введите город')
         bot.register_next_step_handler(message, self.getting_city)
 
     def getting_city(self, message):
         city = message.text.lower()
         self.param_request.update({'city': city})
-        bot.send_message(message.from_user.id, 'Введите дату заезда')
+        cur_date = date.today()
+        bot.send_message(message.from_user.id, 'Выбирете дату заезда', reply_markup=calendar_days(cur_date))
+        # TODO register_next_step_handler жидает от МЕНЯ ввода сообщения, а моя клавиатура выводит сама сообщение из-за
+        #  этого пока я в ручную не ввиду он не будет дальше идти, как это сделать?
         bot.register_next_step_handler(message, self.getting_check_in)
 
     def getting_check_in(self, message):
         check_in = message.text
         self.param_request.update({'checkIn': check_in})
-        bot.send_message(message.from_user.id, 'Введите дату выезда')
+        cur_date = date.today()
+        bot.send_message(message.from_user.id, 'Выбирете дату выезда', reply_markup=calendar_days(cur_date))
         bot.register_next_step_handler(message, self.getting_check_out)
 
     def getting_check_out(self, message):
@@ -83,8 +88,6 @@ class BaseHandler:
             bot.send_message(message.from_user.id, 'Ошибка ввода, повторите ввод')
             bot.register_next_step_handler(message, self.getting_amount_photo)
 
-
-
     def get_data(self):
         logger.info(f'Параметры запроса пользователя: {self.param_request}')
         object_request = RequestHandler()
@@ -93,7 +96,7 @@ class BaseHandler:
         return data_hotels
 
     def history(self, data_hotels):
-        dt = datetime.datetime.now()
+        dt = datetime.now()
         data_request = {'command': self.command,
                         'data_time': dt.strftime("%x %X"),
                         'hotels': ', '.join([name.get('name_hotel') for name in data_hotels])}
@@ -113,14 +116,15 @@ class BaseHandler:
                 if photo:
                     media = []
                     for reference in photo:
-                        media.append(types.InputMediaPhoto(reference))
+                        media.append(InputMediaPhoto(reference))
                     bot.send_media_group(message.chat.id, media)
             self.history(data_hotels)
         else:
             bot.send_message(message.from_user.id, 'По вашему запросу ничего не найдено')
 
+
 class Help:
-    def __call__(self, message):
+    def __call__(self, message: Message):
         mess = 'Я бот предназначенный для поиска отелей\n\nВы можете управлять мной, ' \
                'отправив следующие команды:\n\n/help\n/lowprice\n/highprice\n/bestdeal\n/history'
         bot.send_message(message.chat.id, mess)
@@ -128,6 +132,7 @@ class Help:
 
 class LowPrice(BaseHandler):
     command = 'low_price'
+
 
 
 class HighPrice(BaseHandler):
@@ -143,19 +148,18 @@ class BestDeal(BaseHandler):
         "checkOut": "2020-01-15",
         'max_distance': 2,
         'amount_hotels': '3',
-        'photo_hotels': True,
+        'is_photo_needed': True,
         'amount_photo': 3
     }
     command = 'best_deal'
 
-
-    def getting_check_out(self, message):
+    def getting_check_out(self, message: Message):
         check_out = message.text
         self.param_request.update({'checkOut': check_out})
         bot.send_message(message.from_user.id, 'Введите минимальную цену (руб)')
         bot.register_next_step_handler(message, self.getting_price_min)
 
-    def getting_price_min(self, message):
+    def getting_price_min(self, message: Message):
         try:
             price_min = int(message.text)
             self.param_request.update({'priceMin': price_min})
@@ -165,7 +169,7 @@ class BestDeal(BaseHandler):
             bot.send_message(message.from_user.id, 'Ошибка ввода, повторите ввод')
             bot.register_next_step_handler(message, self.getting_price_min)
 
-    def getting_price_max(self, message):
+    def getting_price_max(self, message: Message):
         try:
             price_max = int(message.text)
             if price_max < self.param_request.get('priceMin'):
@@ -178,7 +182,7 @@ class BestDeal(BaseHandler):
             bot.send_message(message.from_user.id, 'Ошибка ввода, повторите ввод')
             bot.register_next_step_handler(message, self.getting_price_max)
 
-    def getting_distance_for_centre(self, message):
+    def getting_distance_for_centre(self, message: Message):
         try:
             max_distance = int(message.text)
             if max_distance < 0:
@@ -192,12 +196,12 @@ class BestDeal(BaseHandler):
 
 
 class History:
-    def __call__(self, message):
+    def __call__(self, message: Message):
         db.show_history(message)
 
 
-def register_handlers(bot):
-    bot.register_message_handler(Help(), commands=['help'])
+def register_handlers():
+    bot.register_message_handler(Help(), commands=['help', 'start'])
     bot.register_message_handler(LowPrice(), commands=['lowprice'])
     bot.register_message_handler(HighPrice(), commands=['highprice'])
     bot.register_message_handler(BestDeal(), commands=['bestdeal'])
