@@ -143,7 +143,7 @@ def callback_years(call: CallbackQuery) -> None:
 
 
 def register_callback_query_handler():
-    # bot.register_callback_query_handler(callback_date, func=lambda call: call.data.startswith('selected_date'))
+    bot.register_callback_query_handler(callback_date, func=lambda call: call.data.startswith('selected_date'))
     bot.register_callback_query_handler(callback_dates_month, func=lambda call: call.data.startswith('dates'))
     bot.register_callback_query_handler(callback_months, func=lambda call: call.data.startswith('months'))
     bot.register_callback_query_handler(callback_years, func=lambda call: call.data.startswith('years'))

@@ -204,14 +204,18 @@ class BaseRequestsHotels(BaseRequest):
         else:
             return None
 
-    def converter_data_hotels(self, hotel: dict, need_photo, amount_photo=1):
+    def converter_data_hotels(self, hotel: dict, need_photo: bool, amount_photo: int):
         hotel_id = hotel.get("id")
         name_hotel = hotel.get("name")
         address = hotel.get('address')
         if address:
             address = self._get_address(address)
         distance_to_center = hotel["landmarks"][0]["distance"]
-        price = hotel.get('ratePlan')["price"]["current"]
+        logger.info(f'hotel - {hotel}')
+
+        price = hotel['ratePlan']["price"]["current"]
+        logger.info(f'price - {price}')
+
 
         converted_hotel = {
             'hotel_id': hotel_id,
@@ -236,12 +240,12 @@ class BaseRequestsHotels(BaseRequest):
             'city' (str): город поиска
             'checkIn' (str): дата заезда
             'checkOut' (str): дата отъезда
-            'amount_hotels' (str): кол-во отелей
+            'amount_hotels' (int): кол-во отелей
             'is_photo_needed' (bool): надо ли показать фото
             'amount_photo' (int): кол-во фото отеля
         """
         self.update_param(**kwargs)
-        self.querystring.update({"pageSize": kwargs.get('amount_hotels')})
+        self.querystring.update({"pageSize": str(kwargs.get('amount_hotels'))})
 
         hotels_json = self.request_hotels()
 
@@ -285,7 +289,7 @@ class BestDealRequest(BaseRequestsHotels):
         self.querystring.update({"sortOrder": "DISTANCE_FROM_LANDMARK", "landmarkIds": "City center"})
 
     @staticmethod
-    def _check_distance_to_center(max_distance, distance: str) -> bool:
+    def _check_distance_to_center(max_distance: float, distance: str) -> bool:
         """ Метод для проверки дистанции, подходит ли отель по параметру "расстояние до центра"
 
         :param max_distance: максимальное расстояние до центра которое удовлетворяет запросу пользователя
@@ -303,20 +307,20 @@ class BestDealRequest(BaseRequestsHotels):
 
            Keyword Args:
             'city' (str): город поиска
-            'priceMin' (float): минимальная цена
-            'priceMax' (float): максимальная цена
-            'checkIn' (str): дата заезда
-            'checkOut' (str): дата отъезда
+            'check_in' (str): дата заезда
+            'check_out' (str): дата отъезда
+            'price_min' (float): минимальная цена
+            'price_max' (float): максимальная цена
             'max_distance' (float): максимальная удаленность от центра
-            'amount_hotels' (str): кол-во отелей
+            'amount_hotels' (int): кол-во отелей
             'is_photo_needed' (bool): надо ли показать фото
             'amount_photo' (int): кол-во фото отеля
         """
         self.update_param(**kwargs)
-        self.querystring.update({"priceMin": kwargs.get('priceMin'),
-                                 "priceMax": kwargs.get('priceMax'),
+        self.querystring.update({"priceMin": str(kwargs.get('price_min')),
+                                 "priceMax": str(kwargs.get('price_max')),
                                  "pageSize": "25"})
-        amount_hotels = int(kwargs.get('amount_hotels'))
+        amount_hotels = kwargs.get('amount_hotels')
 
         hotels_json = self.request_hotels()
         if hotels_json:
@@ -340,12 +344,13 @@ class BestDealRequest(BaseRequestsHotels):
 
 class RequestHandler:
     _COMMANDS = {
-        'low_price': LowPriceRequest,
-        'high_price': HighPriceRequest,
-        'best_deal': BestDealRequest,
+        'lowprice': LowPriceRequest,
+        'highprice': HighPriceRequest,
+        'bestdeal': BestDealRequest,
     }
 
-    def __call__(self, command: str = 'low_price', **kwargs):
-        object_request = self._COMMANDS.get(command)()
+    @classmethod
+    def __call__(cls, command: str, **kwargs):
+        object_request = cls._COMMANDS.get(command)()
         return object_request(**kwargs)
 
