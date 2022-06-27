@@ -2,7 +2,6 @@
 .idea/
 /debug.log
 .env
-/test.py
 
 
 /API/__pycache__/

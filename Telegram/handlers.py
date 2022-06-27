@@ -2,9 +2,9 @@ from datetime import datetime, date
 
 from loguru import logger
 from states.param_request import UserParamRequestState
-from telebot.types import Message, InputMediaPhoto
+from telebot.types import Message, InputMediaPhoto, CallbackQuery
 from create_bot import bot
-from keyboards.inlinekeyboards import calendar_days
+from keyboards.inlinekeyboards import calendar_days, calendar_months, calendar_years
 from API.Hotels_requests import RequestHandler
 from DataBase.db_for_history import db
 
@@ -23,6 +23,7 @@ def lowprice(message: Message) -> None:
     bot.send_message(message.from_user.id, 'Введите город')
     with bot.retrieve_data(user_id=message.from_user.id, chat_id=message.chat.id) as data:
         data['command'] = 'lowprice'
+    print(f'{message.from_user.id}\n{message.chat.id}')
 
 
 def highprice(message: Message) -> None:
@@ -57,6 +58,7 @@ def get_city(message: Message) -> None:
 
     with bot.retrieve_data(user_id=message.from_user.id, chat_id=message.chat.id) as data:
         data['city'] = message.text
+        print(data)
 
 
 @bot.message_handler(state=UserParamRequestState.check_in)
@@ -64,10 +66,7 @@ def get_check_in(message: Message) -> None:
     """ получаем дату заезда """
     cur_date = date.today()
     bot.send_message(message.from_user.id, 'Ввыберите дату выезда', reply_markup=calendar_days(cur_date))
-    bot.set_state(user_id=message.from_user.id, state=UserParamRequestState.check_out, chat_id=message.chat.id)
 
-    with bot.retrieve_data(user_id=message.from_user.id, chat_id=message.chat.id) as data:
-        data['check_in'] = message.text
 
 
 @bot.message_handler(state=UserParamRequestState.check_out)
@@ -76,8 +75,11 @@ def get_check_out(message: Message) -> None:
     получаем дату выезда, и далее в зависимости от сценария просим ввести минимальную цену либо сразу переходим на
     ввод количества отелей
     """
+    logger.info(f'start get_check_out')     #TODO checkpoint до которого не доходит
+
     with bot.retrieve_data(user_id=message.from_user.id, chat_id=message.chat.id) as data:
         data['check_out'] = message.text
+
         if data.get('command') == 'bestdeal':
             bot.send_message(message.from_user.id, 'Введите минимальную цену (руб)')
             bot.set_state(user_id=message.from_user.id, state=UserParamRequestState.price_min,
@@ -229,7 +231,6 @@ def output_information(chat_id, hotel_information):
             result += ''.join(('\nРасстояние до центра города: ', data_hotel.get('distance_to_center')))
             result += ''.join(('\nОбщая стоимость проживания: ', data_hotel.get('price')))
             bot.send_message(chat_id, result)
-            # bot.send_message(message.from_user.id, result)
             photo = data_hotel.get('photo_hotel')
             if photo:
                 media = []
@@ -264,3 +265,59 @@ def register_handlers():
     bot.register_message_handler(bestdeal, commands=['bestdeal'])
     bot.register_message_handler(history, commands=['history'])
 
+
+
+
+
+def callback_date(call: CallbackQuery) -> None:
+    """ Обработчик, которыйвыводит выбранную дату """
+    logger.info(f'start метода-обработчика callback_date')
+
+    user_choice = datetime.strptime(call.data[-10:], '%Y-%m-%d').date()
+    current_date = date.today()
+    if user_choice < current_date:
+        bot.answer_callback_query(callback_query_id=call.id, text='Нельзя выбрать предыдущую дату', show_alert=True)
+    else:
+        bot.edit_message_text(text=f'Вы выбрали {call.data[-10:]}', chat_id=call.message.chat.id,
+                              message_id=call.message.id)
+
+        user_id = call.message.from_user.id
+        chat_id = call.message.chat.id
+############################################################################################################
+        with bot.retrieve_data(user_id=chat_id, chat_id=chat_id) as data:
+            data['check_in'] = call.data[-10:]
+            logger.info(f'данные после выбор даты {data}')
+        bot.answer_callback_query(call.id)                      # TODO вот после этого места нужно как то перейти к вводу следующего параметра
+        bot.set_state(user_id=user_id, state=UserParamRequestState.check_out,  #TODO почему не переходит на состояние check_out???
+                      chat_id=chat_id)
+#############################################################################################################
+
+
+def callback_dates_month(call: CallbackQuery) -> None:
+    """ Обработчик, который заменяет текущую клавиатуру на клавиатру с выбором дат месяца """
+    logger.info(f'start метода-обработчика callback_dates_month')
+    bot.edit_message_reply_markup(chat_id=call.message.chat.id, message_id=call.message.id,
+                                  reply_markup=calendar_days(datetime.strptime(call.data[-10:], '%Y-%m-%d')))
+    bot.answer_callback_query(call.id)
+
+
+def callback_months(call: CallbackQuery) -> None:
+    """ Обработчик, который заменяет текущую клавиатуру на клавиатру с выбором месяцев """
+    logger.info(f'start метода-обработчика callback_months')
+    bot.edit_message_reply_markup(chat_id=call.message.chat.id, message_id=call.message.id,
+                                  reply_markup=calendar_months(call.data[-4:]))
+    bot.answer_callback_query(call.id)
+
+
+def callback_years(call: CallbackQuery) -> None:
+    """ Обработчик, который заменяет текущую клавиатуру на клавиатру с выбором годов """
+    logger.info(f'start метода-обработчика callback_years')
+    bot.edit_message_reply_markup(chat_id=call.message.chat.id, message_id=call.message.id,
+                                  reply_markup=calendar_years((call.data[-4:])))
+
+
+def register_callback_query_handler():
+    bot.register_callback_query_handler(callback_date, func=lambda call: call.data.startswith('selected_date'))
+    bot.register_callback_query_handler(callback_dates_month, func=lambda call: call.data.startswith('dates'))
+    bot.register_callback_query_handler(callback_months, func=lambda call: call.data.startswith('months'))
+    bot.register_callback_query_handler(callback_years, func=lambda call: call.data.startswith('years'))
