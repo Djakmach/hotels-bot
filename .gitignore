@@ -2,8 +2,7 @@
 .idea/
 /debug.log
 .env
-/test.py
-/test_2.py
+
 
 /API/__pycache__/
 
@@ -12,5 +11,4 @@
 
 /Telegram/__pycache__/
 
-/Telegram/handlers_bot_2.py
-/states/param_request.py
+
