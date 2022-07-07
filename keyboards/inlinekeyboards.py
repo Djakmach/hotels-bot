@@ -1,8 +1,7 @@
-from create_bot import bot
 from typing import List
 
-from telebot.types import InlineKeyboardButton, InlineKeyboardMarkup, CallbackQuery
-from datetime import datetime, date
+from telebot.types import InlineKeyboardButton, InlineKeyboardMarkup
+from datetime import date
 from loguru import logger
 
 EMTPY_FIELD = '-1'
@@ -38,8 +37,8 @@ def calendar_months(year: str) -> InlineKeyboardMarkup:
     months = ['янв', 'фев', 'мар', 'апр', 'май', 'июн', 'июл', 'авг', 'сен', 'окт', 'ноя', 'дек']
     month_button = []
     for i_month, name_month in enumerate(months):
-        month_button.append(InlineKeyboardButton(text=name_month,
-                                                       callback_data=f'dates_selected_month {date(int(year), i_month + 1, 1)}'))
+        month_button.append(InlineKeyboardButton(
+            text=name_month, callback_data=f'dates_selected_month {date(int(year), i_month + 1, 1)}'))
 
     month_button.append(InlineKeyboardButton(text='<', callback_data=f'months_previous_year {int(year) - 1}'))
     month_button.append(InlineKeyboardButton(text=year, callback_data=f'years {year}'))
@@ -65,7 +64,7 @@ def empty_and_filled_dates(now_date: date) -> List[str]:
 
     first_day = date(now_date.year, now_date.month, 1)
 
-    empty_days = [' ' for i in range(first_day.weekday())]
+    empty_days = [' ' for _ in range(first_day.weekday())]
     days.extend(empty_days)
     logger.info(f'Сформировали список empty кнопок в начале месяца: {empty_days}')
 
@@ -77,7 +76,7 @@ def empty_and_filled_dates(now_date: date) -> List[str]:
 
     lost = len(days) % 7
     if lost:
-        empty_days = [' ' for i in range(7 - lost)]
+        empty_days = [' ' for _ in range(7 - lost)]
         days.extend(empty_days)
     logger.info(f'Сформировали список empty кнопок в конце месяца: {empty_days}')
 
@@ -97,8 +96,7 @@ def calendar_days(now_date: date) -> InlineKeyboardMarkup:
 
     for day_button in empty_and_filled_dates(now_date):
         callback_data = date(now_date.year, now_date.month, int(day_button)) if isinstance(day_button, int) else day_button
-        button_dates.append(InlineKeyboardButton(text=day_button,
-                                                       callback_data=f'selected_date {callback_data}'))
+        button_dates.append(InlineKeyboardButton(text=day_button, callback_data=f'selected_date {callback_data}'))
     logger.info(f'cформировали список кнопок')
 
     date_previous_month = date(now_date.year, now_date.month - 1, 1) if now_date.month != 1 else date(now_date.year - 1, 12, 1)

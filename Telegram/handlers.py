@@ -2,9 +2,9 @@ from datetime import datetime, date
 
 from loguru import logger
 from states.param_request import UserParamRequestState
-from telebot.types import Message, InputMediaPhoto, CallbackQuery
+from telebot.types import Message, InputMediaPhoto
 from create_bot import bot
-from keyboards.inlinekeyboards import calendar_days, calendar_months, calendar_years
+from keyboards.inlinekeyboards import calendar_days
 from API.Hotels_requests import RequestHandler
 from DataBase.db_for_history import db
 
@@ -23,7 +23,6 @@ def lowprice(message: Message) -> None:
     bot.send_message(message.from_user.id, 'Введите город')
     with bot.retrieve_data(user_id=message.from_user.id, chat_id=message.chat.id) as data:
         data['command'] = 'lowprice'
-    print(f'{message.from_user.id}\n{message.chat.id}')
 
 
 def highprice(message: Message) -> None:
@@ -52,42 +51,33 @@ def exist_state(message: Message):
 @bot.message_handler(state=UserParamRequestState.city)
 def get_city(message: Message) -> None:
     """ получаем город"""
-    cur_date = date.today()
-    bot.send_message(message.from_user.id, 'Ввыберите дату заезда', reply_markup=calendar_days(cur_date))
-    bot.set_state(user_id=message.from_user.id, state=UserParamRequestState.check_in, chat_id=message.chat.id)
+    logger.info(f'start get_city')
 
     with bot.retrieve_data(user_id=message.from_user.id, chat_id=message.chat.id) as data:
         data['city'] = message.text
-        print(data)
-
-
-@bot.message_handler(state=UserParamRequestState.check_in)
-def get_check_in(message: Message) -> None:
-    """ получаем дату заезда """
     cur_date = date.today()
-    bot.send_message(message.from_user.id, 'Ввыберите дату выезда', reply_markup=calendar_days(cur_date))
+    bot.send_message(message.from_user.id, 'Ввыберите дату заезда', reply_markup=calendar_days(cur_date))
 
 
-
-@bot.message_handler(state=UserParamRequestState.check_out)
-def get_check_out(message: Message) -> None:
+def get_check_out(user_id, chat_id) -> None:
     """
     получаем дату выезда, и далее в зависимости от сценария просим ввести минимальную цену либо сразу переходим на
     ввод количества отелей
     """
-    logger.info(f'start get_check_out')     #TODO checkpoint до которого не доходит
+    logger.info(f'start get_check_out')
 
-    with bot.retrieve_data(user_id=message.from_user.id, chat_id=message.chat.id) as data:
-        data['check_out'] = message.text
+    with bot.retrieve_data(user_id=user_id, chat_id=chat_id) as data:
+
+        logger.info(f'данные  {data}')
 
         if data.get('command') == 'bestdeal':
-            bot.send_message(message.from_user.id, 'Введите минимальную цену (руб)')
-            bot.set_state(user_id=message.from_user.id, state=UserParamRequestState.price_min,
-                          chat_id=message.chat.id)
+            bot.send_message(chat_id, 'Введите минимальную цену (руб)')
+            bot.set_state(user_id=user_id, state=UserParamRequestState.price_min,
+                          chat_id=chat_id)
         else:
-            bot.send_message(message.from_user.id, 'Введите кол-во отелей (не больше 10)')
-            bot.set_state(user_id=message.from_user.id, state=UserParamRequestState.amount_hotels,
-                          chat_id=message.chat.id)
+            bot.send_message(chat_id, 'Введите кол-во отелей (не больше 10)')
+            bot.set_state(user_id=user_id, state=UserParamRequestState.amount_hotels,
+                          chat_id=chat_id)
 
 
 @bot.message_handler(state=UserParamRequestState.price_min)
@@ -98,8 +88,7 @@ def get_price_min(message: Message) -> None:
         with bot.retrieve_data(user_id=message.from_user.id, chat_id=message.chat.id) as data:
             data['price_min'] = price_min
         bot.send_message(message.from_user.id, 'Введите максимальную цену (руб)')
-        bot.set_state(user_id=message.from_user.id, state=UserParamRequestState.price_max,
-                     chat_id=message.chat.id)
+        bot.set_state(user_id=message.from_user.id, state=UserParamRequestState.price_max, chat_id=message.chat.id)
     except ValueError:
         bot.send_message(message.from_user.id, 'Ошибка ввода')
 
@@ -115,8 +104,9 @@ def get_price_max(message: Message) -> None:
             else:
                 data['price_max'] = price_max
                 bot.send_message(message.from_user.id, 'Введите максимальное расстояние от центра города (км)')
-                bot.set_state(user_id=message.from_user.id, state=UserParamRequestState.distance_for_centre,
-                             chat_id=message.chat.id)
+                bot.set_state(user_id=message.from_user.id,
+                              state=UserParamRequestState.distance_for_centre,
+                              chat_id=message.chat.id)
     except ValueError:
         bot.send_message(message.from_user.id, 'Ошибка ввода')
 
@@ -192,9 +182,7 @@ def get_amount_photo(message: Message) -> None:
             data['amount_photo'] = amount_photo
             logger.info(f'amount_photo = {amount_photo}')
 
-
             processing_request(data, chat_id)
-
 
         bot.delete_state(message.from_user.id, message.chat.id)
 
@@ -207,9 +195,13 @@ def processing_request(request_parameters, chat_id):
     """ начинаем процесс обработки запроса """
 
     hotel_information = get_information(request_parameters)
-    output_information(chat_id, hotel_information)
-    hotels = ', '.join([name.get('name_hotel') for name in hotel_information])
-    write_in_history(request_parameters.get('command'), hotels)
+    if hotel_information:
+        output_information(chat_id, hotel_information)
+        hotels = ', '.join([name.get('name_hotel') for name in hotel_information])
+        write_in_history(request_parameters.get('command'), hotels)
+    else:
+        bot.send_message(chat_id, 'По вашему запросу ничего не найдено')
+
 
 def get_information(data):
     """ получаем данные об оттелях """
@@ -223,23 +215,19 @@ def get_information(data):
 def output_information(chat_id, hotel_information):
     """ выводим информацию об отелях в чат пользователю """
 
-    if hotel_information:
-        for data_hotel in hotel_information:
-            result = ''
-            result += ''.join(('Название отеля: ', data_hotel.get('name_hotel')))
-            result += ''.join(('\nАдрес отеля: ', data_hotel.get('adress')))
-            result += ''.join(('\nРасстояние до центра города: ', data_hotel.get('distance_to_center')))
-            result += ''.join(('\nОбщая стоимость проживания: ', data_hotel.get('price')))
-            bot.send_message(chat_id, result)
-            photo = data_hotel.get('photo_hotel')
-            if photo:
-                media = []
-                for reference in photo:
-                    media.append(InputMediaPhoto(reference))
-                bot.send_media_group(chat_id, media)
-    else:
-        bot.send_message(chat_id, 'По вашему запросу ничего не найдено')
-        # bot.send_message(message.from_user.id, 'По вашему запросу ничего не найдено')
+    for data_hotel in hotel_information:
+        result = ''
+        result += ''.join(('Название отеля: ', data_hotel.get('name_hotel')))
+        result += ''.join(('\nАдрес отеля: ', data_hotel.get('adress')))
+        result += ''.join(('\nРасстояние до центра города: ', data_hotel.get('distance_to_center')))
+        result += ''.join(('\nОбщая стоимость проживания: ', data_hotel.get('price')))
+        bot.send_message(chat_id, result)
+        photo = data_hotel.get('photo_hotel')
+        if photo:
+            media = []
+            for reference in photo:
+                media.append(InputMediaPhoto(reference))
+            bot.send_media_group(chat_id, media)
 
 
 def write_in_history(command, hotels):
@@ -259,65 +247,9 @@ def history(message: Message) -> None:
 
 
 def register_handlers():
+    """ Регистратор всех хендлеров """
     bot.register_message_handler(help_handler, commands=['help'])
     bot.register_message_handler(lowprice, commands=['lowprice'])
     bot.register_message_handler(highprice, commands=['highprice'])
     bot.register_message_handler(bestdeal, commands=['bestdeal'])
     bot.register_message_handler(history, commands=['history'])
-
-
-
-
-
-def callback_date(call: CallbackQuery) -> None:
-    """ Обработчик, которыйвыводит выбранную дату """
-    logger.info(f'start метода-обработчика callback_date')
-
-    user_choice = datetime.strptime(call.data[-10:], '%Y-%m-%d').date()
-    current_date = date.today()
-    if user_choice < current_date:
-        bot.answer_callback_query(callback_query_id=call.id, text='Нельзя выбрать предыдущую дату', show_alert=True)
-    else:
-        bot.edit_message_text(text=f'Вы выбрали {call.data[-10:]}', chat_id=call.message.chat.id,
-                              message_id=call.message.id)
-
-        user_id = call.message.from_user.id
-        chat_id = call.message.chat.id
-############################################################################################################
-        with bot.retrieve_data(user_id=chat_id, chat_id=chat_id) as data:
-            data['check_in'] = call.data[-10:]
-            logger.info(f'данные после выбор даты {data}')
-        bot.answer_callback_query(call.id)                      # TODO вот после этого места нужно как то перейти к вводу следующего параметра
-        bot.set_state(user_id=user_id, state=UserParamRequestState.check_out,  #TODO почему не переходит на состояние check_out???
-                      chat_id=chat_id)
-#############################################################################################################
-
-
-def callback_dates_month(call: CallbackQuery) -> None:
-    """ Обработчик, который заменяет текущую клавиатуру на клавиатру с выбором дат месяца """
-    logger.info(f'start метода-обработчика callback_dates_month')
-    bot.edit_message_reply_markup(chat_id=call.message.chat.id, message_id=call.message.id,
-                                  reply_markup=calendar_days(datetime.strptime(call.data[-10:], '%Y-%m-%d')))
-    bot.answer_callback_query(call.id)
-
-
-def callback_months(call: CallbackQuery) -> None:
-    """ Обработчик, который заменяет текущую клавиатуру на клавиатру с выбором месяцев """
-    logger.info(f'start метода-обработчика callback_months')
-    bot.edit_message_reply_markup(chat_id=call.message.chat.id, message_id=call.message.id,
-                                  reply_markup=calendar_months(call.data[-4:]))
-    bot.answer_callback_query(call.id)
-
-
-def callback_years(call: CallbackQuery) -> None:
-    """ Обработчик, который заменяет текущую клавиатуру на клавиатру с выбором годов """
-    logger.info(f'start метода-обработчика callback_years')
-    bot.edit_message_reply_markup(chat_id=call.message.chat.id, message_id=call.message.id,
-                                  reply_markup=calendar_years((call.data[-4:])))
-
-
-def register_callback_query_handler():
-    bot.register_callback_query_handler(callback_date, func=lambda call: call.data.startswith('selected_date'))
-    bot.register_callback_query_handler(callback_dates_month, func=lambda call: call.data.startswith('dates'))
-    bot.register_callback_query_handler(callback_months, func=lambda call: call.data.startswith('months'))
-    bot.register_callback_query_handler(callback_years, func=lambda call: call.data.startswith('years'))

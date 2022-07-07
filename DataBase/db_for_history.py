@@ -22,15 +22,19 @@ class DB:
         self.cursor.execute('INSERT INTO history VALUES (NULL, ?, ?, ?)', tuple(data_request.values()))
         self.data_base.commit()
 
-
     def show_history(self, message) -> None:
         """ Метод для получения данных из базы данных """
         try:
-            for request in self.cursor.execute('SELECT * FROM history').fetchall():
-                bot.send_message(message.from_user.id, f'Комманда: {request[1]}\nДата и время: {request[2]}\nНайденный отели: {request[3]}')
-                self.data_base.commit()
+            data = self.cursor.execute('SELECT * FROM history').fetchall()
+            if data:
+                for request in data:
+                    bot.send_message(message.from_user.id, f'Комманда: {request[1]}\nДата и время: {request[2]}\n'
+                                                           f'Найденный отели: {request[3]}')
+                    self.data_base.commit()
+            else:
+                bot.send_message(message.from_user.id, 'История поиска пуста')
         except AttributeError:
-            bot.send_message(message.from_user.id, 'История поиска пуста')
+            logger.info('База данных с историей запросов отсутсвует')
 
 
 db = DB()
