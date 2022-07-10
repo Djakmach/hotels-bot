@@ -16,7 +16,6 @@ def calendar_years(year: str) -> InlineKeyboardMarkup:
     """
 
     logger.info('start calendar_years')
-    logger.info(f'year = {year}')
     keyboard = InlineKeyboardMarkup(row_width=3)
     year = int(year)
     keyboard.add(InlineKeyboardButton(text=str(year - 1), callback_data=f'months_selected_year {str(year - 1)}'))
@@ -36,17 +35,15 @@ def calendar_months(year: str) -> InlineKeyboardMarkup:
     keyboard = InlineKeyboardMarkup(row_width=4)
     months = ['янв', 'фев', 'мар', 'апр', 'май', 'июн', 'июл', 'авг', 'сен', 'окт', 'ноя', 'дек']
     month_button = []
-    for i_month, name_month in enumerate(months):
+    for nomber_month, name_month in enumerate(months):
         month_button.append(InlineKeyboardButton(
-            text=name_month, callback_data=f'dates_selected_month {date(int(year), i_month + 1, 1)}'))
+            text=name_month, callback_data=f'dates_selected_month {date(int(year), nomber_month + 1, 1)}'))
 
     month_button.append(InlineKeyboardButton(text='<', callback_data=f'months_previous_year {int(year) - 1}'))
     month_button.append(InlineKeyboardButton(text=year, callback_data=f'years {year}'))
     month_button.append(InlineKeyboardButton(text='>', callback_data=f'months_next_year {int(year) + 1}'))
-    logger.info('list buttons ready')
 
     keyboard.add(*month_button)
-    logger.info('return calendar_month')
     return keyboard
 
 
@@ -66,19 +63,16 @@ def empty_and_filled_dates(now_date: date) -> List[str]:
 
     empty_days = [' ' for _ in range(first_day.weekday())]
     days.extend(empty_days)
-    logger.info(f'Сформировали список empty кнопок в начале месяца: {empty_days}')
 
     next_month = date(first_day.year, first_day.month + 1, 1) if first_day.month != 12 else date(first_day.year + 1, 1, 1)
     days_in_month = (next_month - first_day).days
     dates = [day for day in range(1, days_in_month + 1)]
     days.extend(dates)
-    logger.info(f'Сформировали список дат месяца : {dates}')
 
     lost = len(days) % 7
     if lost:
         empty_days = [' ' for _ in range(7 - lost)]
         days.extend(empty_days)
-    logger.info(f'Сформировали список empty кнопок в конце месяца: {empty_days}')
 
     return days
 
@@ -97,7 +91,6 @@ def calendar_days(now_date: date) -> InlineKeyboardMarkup:
     for day_button in empty_and_filled_dates(now_date):
         callback_data = date(now_date.year, now_date.month, int(day_button)) if isinstance(day_button, int) else day_button
         button_dates.append(InlineKeyboardButton(text=day_button, callback_data=f'selected_date {callback_data}'))
-    logger.info(f'cформировали список кнопок')
 
     date_previous_month = date(now_date.year, now_date.month - 1, 1) if now_date.month != 1 else date(now_date.year - 1, 12, 1)
     button_dates.append(InlineKeyboardButton(text='<', callback_data=f'dates_previous_month {date_previous_month}'))

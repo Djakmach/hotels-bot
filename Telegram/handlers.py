@@ -13,7 +13,11 @@ def help_handler(message: Message) -> None:
     """ стандартный хендлер, реагирующий на команды help и start """
 
     mess = 'Я бот предназначенный для поиска отелей\n\nВы можете управлять мной, ' \
-           'отправив следующие команды:\n\n/help\n/lowprice\n/highprice\n/bestdeal\n/history'
+           'отправив следующие команды:\n\n/help - помощь по командам бота\n' \
+           '/lowprice - вывод самых дешёвых отелей в городе\n' \
+           '/highprice - вывод самых дорогих отелей в городе\n' \
+           '/bestdeal - вывод отелей, наиболее подходящих по цене и расположению от центра\n' \
+           '/history -  вывод истории поиска отелей'
     bot.send_message(message.chat.id, mess)
 
 
@@ -68,10 +72,10 @@ def get_check_out(user_id, chat_id) -> None:
 
     with bot.retrieve_data(user_id=user_id, chat_id=chat_id) as data:
 
-        logger.info(f'данные  {data}')
+        logger.info(f'данные пользователя {user_id} {data}')
 
         if data.get('command') == 'bestdeal':
-            bot.send_message(chat_id, 'Введите минимальную цену (руб)')
+            bot.send_message(chat_id, 'Введите минимальную цену за ночь (руб)')
             bot.set_state(user_id=user_id, state=UserParamRequestState.price_min,
                           chat_id=chat_id)
         else:
@@ -87,7 +91,7 @@ def get_price_min(message: Message) -> None:
         price_min = int(message.text)
         with bot.retrieve_data(user_id=message.from_user.id, chat_id=message.chat.id) as data:
             data['price_min'] = price_min
-        bot.send_message(message.from_user.id, 'Введите максимальную цену (руб)')
+        bot.send_message(message.from_user.id, 'Введите максимальную цену за ночь (руб)')
         bot.set_state(user_id=message.from_user.id, state=UserParamRequestState.price_max, chat_id=message.chat.id)
     except ValueError:
         bot.send_message(message.from_user.id, 'Ошибка ввода')
@@ -135,7 +139,6 @@ def get_amount_hotels(message: Message) -> None:
         if 1 <= amount_hotels <= 10:
             with bot.retrieve_data(user_id=message.from_user.id, chat_id=message.chat.id) as data:
                 data['amount_hotels'] = amount_hotels
-                logger.info(f'amount_hotels = {amount_hotels}')
             bot.send_message(message.from_user.id, 'Предоставить фото?')
             bot.set_state(user_id=message.from_user.id, state=UserParamRequestState.is_photo_needed,
                           chat_id=message.chat.id)
@@ -152,18 +155,18 @@ def get_is_photo_needed(message: Message) -> None:
     if message.text == 'да' or message.text == 'yes':
         with bot.retrieve_data(user_id=message.from_user.id, chat_id=message.chat.id) as data:
             data['is_photo_needed'] = True
-            logger.info('is_photo_needed = True')
+
             bot.send_message(message.from_user.id, 'Сколько вывести фотографий?')
             bot.set_state(user_id=message.from_user.id, state=UserParamRequestState.amount_photo,
                           chat_id=message.chat.id)
     elif message.text == 'нет' or message.text == 'no':
         with bot.retrieve_data(user_id=message.from_user.id, chat_id=message.chat.id) as data:
             data['is_photo_needed'] = False
-            logger.info('is_photo_needed = False')
+
             processing_request(data, chat_id)
         bot.delete_state(message.from_user.id, message.chat.id)
     else:
-        logger.info('is_photo_needed - ошибка ввода')
+
         bot.send_message(message.from_user.id, 'Ошибка ввода')
 
 
@@ -180,7 +183,6 @@ def get_amount_photo(message: Message) -> None:
 
         with bot.retrieve_data(user_id=message.from_user.id, chat_id=chat_id) as data:
             data['amount_photo'] = amount_photo
-            logger.info(f'amount_photo = {amount_photo}')
 
             processing_request(data, chat_id)
 
@@ -188,13 +190,14 @@ def get_amount_photo(message: Message) -> None:
 
     except ValueError:
         bot.send_message(message.from_user.id, 'Ошибка ввода')
-        logger.info(f'amount_photo - ошибка ввода')
 
 
 def processing_request(request_parameters, chat_id):
     """ начинаем процесс обработки запроса """
 
+    logger.info(f'Параметры запроса для пользователя {chat_id}: {request_parameters}')
     hotel_information = get_information(request_parameters)
+    logger.info(f'Результат поиска для пользователя {chat_id}: {hotel_information}')
     if hotel_information:
         output_information(chat_id, hotel_information)
         hotels = ', '.join([name.get('name_hotel') for name in hotel_information])
@@ -206,7 +209,6 @@ def processing_request(request_parameters, chat_id):
 def get_information(data):
     """ получаем данные об оттелях """
 
-    logger.info(f'Параметры запроса пользователя: {data}')
     object_request = RequestHandler()
     hotel_information = object_request(**data)
     return hotel_information
@@ -220,7 +222,8 @@ def output_information(chat_id, hotel_information):
         result += ''.join(('Название отеля: ', data_hotel.get('name_hotel')))
         result += ''.join(('\nАдрес отеля: ', data_hotel.get('adress')))
         result += ''.join(('\nРасстояние до центра города: ', data_hotel.get('distance_to_center')))
-        result += ''.join(('\nОбщая стоимость проживания: ', data_hotel.get('price')))
+        result += ''.join(('\nСтоимость за сутки проживания (без НДС): ', data_hotel.get('price')))
+        result += ''.join(('\nОбщая стоимость проживания с учетом все сборов: ', data_hotel.get('full_price')))
         bot.send_message(chat_id, result)
         photo = data_hotel.get('photo_hotel')
         if photo:
@@ -246,10 +249,15 @@ def history(message: Message) -> None:
     db.show_history(message)
 
 
+def invalid_command(message):
+    bot.reply_to(message, 'Такой команды нет')
+
+
 def register_handlers():
     """ Регистратор всех хендлеров """
-    bot.register_message_handler(help_handler, commands=['help'])
+    bot.register_message_handler(help_handler, commands=['help', 'start'])
     bot.register_message_handler(lowprice, commands=['lowprice'])
     bot.register_message_handler(highprice, commands=['highprice'])
     bot.register_message_handler(bestdeal, commands=['bestdeal'])
     bot.register_message_handler(history, commands=['history'])
+    bot.register_message_handler(invalid_command, func=lambda m: True)
