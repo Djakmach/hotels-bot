@@ -24,7 +24,7 @@ def callback_date(call: CallbackQuery) -> None:
 
         if not data.get('check_in'):
             data['check_in'] = call.data[-10:]
-            logger.info(f'данные после выбор даты заезда{data}')
+            logger.info(f'данные после выбор даты заезда для пользователя {user_id} {data}')
             cur_date = date.today()
             bot.edit_message_text(text=f'Вы выбрали {call.data[-10:]}', chat_id=chat_id,
                                   message_id=call.message.id)
@@ -36,7 +36,7 @@ def callback_date(call: CallbackQuery) -> None:
             check_out = datetime.strptime(call.data[-10:], '%Y-%m-%d').date()
             if check_in < check_out:
                 data['check_out'] = call.data[-10:]
-                logger.info(f'данные после выбор даты выезда{data}')
+                logger.info(f'данные после выбор даты выезда для пользователя {user_id} {data}')
                 bot.edit_message_text(text=f'Вы выбрали {call.data[-10:]}', chat_id=chat_id, message_id=call.message.id)
             else:
                 bot.answer_callback_query(callback_query_id=call.id,

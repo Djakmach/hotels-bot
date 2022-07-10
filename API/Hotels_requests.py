@@ -95,16 +95,13 @@ class BaseRequestsHotels(BaseRequest):
     def __init__(self):
         self.url = "https://hotels4.p.rapidapi.com/properties/list"
         self.querystring = {
-            "destinationId": "1506246",
             "pageNumber": "1",
             "pageSize": "25",
             "checkIn": "2020-01-08",
             "checkOut": "2020-01-15",
             "adults1": "1",
-            "priceMin": '500',
-            "priceMax": '10000',
             "sortOrder": "PRICE",
-            "locale": "ru_RU",
+            "locale": "en_US",
             "currency": "RUB"
         }
 
@@ -202,15 +199,17 @@ class BaseRequestsHotels(BaseRequest):
         destination_id = self.location_request(kwargs.get('city'))
         if destination_id:
             self.querystring.update({"destinationId": destination_id,
-                                     "checkIn": kwargs.get('checkIn'),
-                                     "checkOut": kwargs.get('checkOut')})
+                                     "checkIn": kwargs.get('check_in'),
+                                     "checkOut": kwargs.get('check_out')})
             return True
         else:
             return False
 
     def request_hotels(self):
         """ Метод для получения json формата данных об отелях"""
+        logger.info(f'querystring - {self.querystring}')
         response_hotels = self.get_response(self.url, self.querystring)
+
         pattern_hotels = r'(?<=,"results":).+?(?=,"pagination)'
         find = re.search(pattern_hotels, response_hotels.text)
         if find:
@@ -218,6 +217,13 @@ class BaseRequestsHotels(BaseRequest):
             return hotels_json
         else:
             return None
+
+    @staticmethod
+    def get_full_price(price_message: str):
+        pattern_price = r'(?<=total )[\d,]+'
+        price = re.search(pattern_price, price_message).group(0)
+        logger.info(f'price - {price}')
+        return price
 
     def converter_data_hotels(self, hotel: dict, need_photo: bool, amount_photo: int):
         """ Метод вытягивания необходимых для нас данных об отеле"""
@@ -227,18 +233,24 @@ class BaseRequestsHotels(BaseRequest):
         if address:
             address = self._get_address(address)
         distance_to_center = hotel["landmarks"][0]["distance"]
-        logger.info(f'hotel - {hotel}')
 
-        price = hotel['ratePlan']["price"]["current"]
-        logger.info(f'price - {price}')
+        price_per_night = hotel['ratePlan']["price"]["current"]
+        logger.info(f'price_per_night - {price_per_night}')
 
         converted_hotel = {
             'hotel_id': hotel_id,
             'name_hotel': name_hotel,
             'adress': address,
             'distance_to_center': distance_to_center,
-            'price': price,
+            'price': price_per_night,
         }
+
+        full_price = hotel['ratePlan']["price"].get("fullyBundledPricePerStay")
+
+        if full_price:
+            full_price_per_stay = self.get_full_price(full_price)
+            converted_hotel.update({'full_price': full_price_per_stay})
+            logger.info(f'full_price_per_stay - {full_price_per_stay}')
 
         if need_photo:
             photo_hotel = self.photo_requests(hotel_id, amount_photo)
