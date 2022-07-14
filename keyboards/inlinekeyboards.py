@@ -15,7 +15,6 @@ def calendar_years(year: str) -> InlineKeyboardMarkup:
        :rtype year: str
     """
 
-    logger.info('start calendar_years')
     keyboard = InlineKeyboardMarkup(row_width=3)
     year = int(year)
     keyboard.add(InlineKeyboardButton(text=str(year - 1), callback_data=f'months_selected_year {str(year - 1)}'))
@@ -31,7 +30,6 @@ def calendar_months(year: str) -> InlineKeyboardMarkup:
        :param year: год от которого отталкивается выбор
        :rtype year: str
     """
-    logger.info('start calendar_month')
     keyboard = InlineKeyboardMarkup(row_width=4)
     months = ['янв', 'фев', 'мар', 'апр', 'май', 'июн', 'июл', 'авг', 'сен', 'окт', 'ноя', 'дек']
     month_button = []
@@ -83,7 +81,6 @@ def calendar_days(now_date: date) -> InlineKeyboardMarkup:
 
        :param now_date: год от которого отталкивается выбор
     """
-    logger.info('start calendar_days')
     keyboard = InlineKeyboardMarkup(row_width=7)
 
     button_dates = []

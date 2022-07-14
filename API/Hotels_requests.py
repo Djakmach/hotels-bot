@@ -38,6 +38,7 @@ class BaseRequest(ABC):
                 logger.debug('по запросу ничего не найдено')
         except requests.exceptions.ReadTimeout:
             logger.debug('время ожидания запроса истекло')
+            return False
 
 
 class LocationRequest(BaseRequest):
@@ -52,7 +53,7 @@ class LocationRequest(BaseRequest):
     url = "https://hotels4.p.rapidapi.com/locations/v2/search"
     querystring = {"query": "new york", "locale": "ru_RU", "currency": "RUB"}
 
-    def get_location(self, city) -> Optional[str]:
+    def _get_location(self, city) -> Optional[str]:
         """
         Метод для получения id города
 
@@ -67,18 +68,16 @@ class LocationRequest(BaseRequest):
         find = re.search(pattern_destination, response.text)
         if find:
             data = json.loads(f"{{{find[0]}}}")
-            if not data["entities"]:
-                logger.exception('нет данных по локации')
-                return None
-            destination_id = data["entities"][0]["destinationId"]
-        else:
-            logger.exception('нет данных')
-            return
-        logger.info(f'получили id города: {destination_id}')
-        return destination_id
+            if data["entities"]:
+                destination_id = data["entities"][0]["destinationId"]
+                logger.info(f'получили id города: {destination_id}')
+                return destination_id
+
+        logger.debug('нет данных по локации')
+        return None
 
     def __call__(self, city):
-        return self.get_location(city)
+        return self._get_location(city)
 
 
 class BaseRequestsHotels(BaseRequest):
@@ -108,7 +107,7 @@ class BaseRequestsHotels(BaseRequest):
         self.hotels_deal = []
 
     @staticmethod
-    def location_request(city: str) -> Optional[str]:
+    def _location_request(city: str) -> Optional[str]:
         """
         Метод для поиска id города
 
@@ -120,10 +119,9 @@ class BaseRequestsHotels(BaseRequest):
         destination_id = search_destination_id(city)
         if destination_id:
             return destination_id
-        else:
-            return
+        return None
 
-    def photo_requests(self, hotel_id: str, amount_photo: int) -> Optional[List[str]]:
+    def _photo_requests(self, hotel_id: str, amount_photo: int) -> Optional[List[str]]:
         """
         Метод для получения фотографий отеля
 
@@ -136,25 +134,25 @@ class BaseRequestsHotels(BaseRequest):
         url_photo = "https://hotels4.p.rapidapi.com/properties/get-hotel-photos"
         querystring = {"id": hotel_id}
         response_photo = self.get_response(url_photo, querystring)
+        if response_photo:
+            pattern_photo = r'(?<=,"hotelImages":).+?(?=,"roomImages)'
+            find = re.search(pattern_photo, response_photo.text)
+            if find:
+                hotel_photos_json = json.loads(f"{find.group(0)}")
 
-        pattern_photo = r'(?<=,"hotelImages":).+?(?=,"roomImages)'
-        find = re.search(pattern_photo, response_photo.text)
-        if find:
-            hotel_photos_json = json.loads(f"{find.group(0)}")
+                counter = 0
+                for data_photo in hotel_photos_json:
 
-            counter = 0
-            for data_photo in hotel_photos_json:
+                    photo_hotel = data_photo["baseUrl"].replace('{size}', 'z')
+                    photos.append(photo_hotel)
+                    counter += 1
+                    if counter >= amount_photo:
+                        break
 
-                photo_hotel = data_photo["baseUrl"].replace('{size}', 'z')
-                photos.append(photo_hotel)
-                counter += 1
-                if counter >= amount_photo:
-                    break
+                return photos
 
-            return photos
-        else:
-            logger.info('фотограйий нет')
-            return
+        logger.info('фотограйий нет')
+        return None
 
     @staticmethod
     def _get_address(address_data: dict) -> str:
@@ -192,11 +190,11 @@ class BaseRequestsHotels(BaseRequest):
                 address = extended_address
         return address
 
-    def update_param(self, **kwargs):
+    def _update_param(self, **kwargs):
         """ Вводим параметры запроса пользователя для дальнейшего поиска отелей,
          причем, если по запросу локации города не найдено ничего, тогда метод возвращет False """
 
-        destination_id = self.location_request(kwargs.get('city'))
+        destination_id = self._location_request(kwargs.get('city'))
         if destination_id:
             self.querystring.update({"destinationId": destination_id,
                                      "checkIn": kwargs.get('check_in'),
@@ -205,7 +203,7 @@ class BaseRequestsHotels(BaseRequest):
         else:
             return False
 
-    def request_hotels(self):
+    def _request_hotels(self):
         """ Метод для получения json формата данных об отелях"""
         logger.info(f'querystring - {self.querystring}')
         response_hotels = self.get_response(self.url, self.querystring)
@@ -219,13 +217,12 @@ class BaseRequestsHotels(BaseRequest):
             return None
 
     @staticmethod
-    def get_full_price(price_message: str):
+    def _get_full_price(price_message: str):
         pattern_price = r'(?<=total )[\d,]+'
         price = re.search(pattern_price, price_message).group(0)
-        logger.info(f'price - {price}')
         return price
 
-    def converter_data_hotels(self, hotel: dict, need_photo: bool, amount_photo: int):
+    def _converter_data_hotels(self, hotel: dict, need_photo: bool, amount_photo: int):
         """ Метод вытягивания необходимых для нас данных об отеле"""
         hotel_id = hotel.get("id")
         name_hotel = hotel.get("name")
@@ -235,7 +232,6 @@ class BaseRequestsHotels(BaseRequest):
         distance_to_center = hotel["landmarks"][0]["distance"]
 
         price_per_night = hotel['ratePlan']["price"]["current"]
-        logger.info(f'price_per_night - {price_per_night}')
 
         converted_hotel = {
             'hotel_id': hotel_id,
@@ -248,14 +244,13 @@ class BaseRequestsHotels(BaseRequest):
         full_price = hotel['ratePlan']["price"].get("fullyBundledPricePerStay")
 
         if full_price:
-            full_price_per_stay = self.get_full_price(full_price)
+            full_price_per_stay = self._get_full_price(full_price)
             converted_hotel.update({'full_price': full_price_per_stay})
-            logger.info(f'full_price_per_stay - {full_price_per_stay}')
 
         if need_photo:
-            photo_hotel = self.photo_requests(hotel_id, amount_photo)
-            converted_hotel.update({'photo_hotel': photo_hotel})
-            logger.info('фотограйий получены')
+            photo_hotel = self._photo_requests(hotel_id, amount_photo)
+            if photo_hotel:
+                converted_hotel.update({'photo_hotel': photo_hotel})
 
         return converted_hotel
 
@@ -271,20 +266,24 @@ class BaseRequestsHotels(BaseRequest):
             'is_photo_needed' (bool): надо ли показать фото
             'amount_photo' (int): кол-во фото отеля
         """
-        if not self.update_param(**kwargs):
+        if not self._update_param(**kwargs):
             return None
         self.querystring.update({"pageSize": str(kwargs.get('amount_hotels'))})
 
-        hotels_json = self.request_hotels()
+        hotels_json = self._request_hotels()
+        if hotels_json:
+            for data_hotel in hotels_json:
+                converted_hotel = self._converter_data_hotels(data_hotel, kwargs.get('is_photo_needed'),
+                                                              kwargs.get('amount_photo'))
 
-        for data_hotel in hotels_json:
-            converted_hotel = self.converter_data_hotels(data_hotel, kwargs.get('is_photo_needed'),
-                                                         kwargs.get('amount_photo'))
+                self.hotels_deal.append(converted_hotel)
 
-            self.hotels_deal.append(converted_hotel)
+            logger.info('данные об отелях получены успешно')
+            return self.hotels_deal
+        else:
+            logger.info('По запросу ничего не найдено')
+            return None
 
-        logger.info('данные об отелях получены успешно')
-        return self.hotels_deal
 
     def __call__(self, **kwargs):
         return self._get_hotels(**kwargs)
@@ -345,21 +344,21 @@ class BestDealRequest(BaseRequestsHotels):
             'is_photo_needed' (bool): надо ли показать фото
             'amount_photo' (int): кол-во фото отеля
         """
-        if not self.update_param(**kwargs):
+        if not self._update_param(**kwargs):
             return None
         self.querystring.update({"priceMin": str(kwargs.get('price_min')),
                                  "priceMax": str(kwargs.get('price_max')),
                                  "pageSize": "25"})
         amount_hotels = kwargs.get('amount_hotels')
 
-        hotels_json = self.request_hotels()
+        hotels_json = self._request_hotels()
         if hotels_json:
             for data_hotel in hotels_json:
 
                 distance_to_center = data_hotel["landmarks"][0]["distance"]
                 if self._check_distance_to_center(kwargs.get('max_distance'), distance_to_center):
-                    converted_hotel = self.converter_data_hotels(data_hotel, kwargs.get('is_photo_needed'),
-                                                                 kwargs.get('amount_photo'))
+                    converted_hotel = self._converter_data_hotels(data_hotel, kwargs.get('is_photo_needed'),
+                                                                  kwargs.get('amount_photo'))
 
                     self.hotels_deal.append(converted_hotel)
 

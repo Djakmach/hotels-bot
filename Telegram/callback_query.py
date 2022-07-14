@@ -9,7 +9,7 @@ from Telegram.handlers import get_check_out
 
 def callback_date(call: CallbackQuery) -> None:
     """ Обработчик, которыйвыводит выбранную дату """
-    logger.info(f'start метода-обработчика callback_date')
+
 
     user_id = call.from_user.id
     chat_id = call.message.chat.id
@@ -18,36 +18,39 @@ def callback_date(call: CallbackQuery) -> None:
     current_date = date.today()
     if user_choice < current_date:
         bot.answer_callback_query(callback_query_id=call.id, text='Нельзя выбрать предыдущую дату', show_alert=True)
+        logger.info(f"Пользователь с id {call.from_user.id} выбрал дату прошедшую дату")
         return
 
     with bot.retrieve_data(user_id=user_id, chat_id=chat_id) as data:
 
         if not data.get('check_in'):
             data['check_in'] = call.data[-10:]
-            logger.info(f'данные после выбор даты заезда для пользователя {user_id} {data}')
+            logger.info(f"Пользователь с id {user_id} ввел информацию о дате заезда: ('{call.data[-10:]}')")
+
             cur_date = date.today()
-            bot.edit_message_text(text=f'Вы выбрали {call.data[-10:]}', chat_id=chat_id,
+            bot.edit_message_text(text=f'Вы выбрали дату заезда {call.data[-10:]}', chat_id=chat_id,
                                   message_id=call.message.id)
             bot.answer_callback_query(call.id)
-            bot.send_message(chat_id, 'Ввыберите дату выезда', reply_markup=calendar_days(cur_date))
+            bot.send_message(chat_id, 'Ввыберите дату отъезда', reply_markup=calendar_days(cur_date))
             return
         else:
             check_in = datetime.strptime(data.get('check_in'), '%Y-%m-%d').date()
             check_out = datetime.strptime(call.data[-10:], '%Y-%m-%d').date()
             if check_in < check_out:
                 data['check_out'] = call.data[-10:]
-                logger.info(f'данные после выбор даты выезда для пользователя {user_id} {data}')
-                bot.edit_message_text(text=f'Вы выбрали {call.data[-10:]}', chat_id=chat_id, message_id=call.message.id)
+                logger.info(f"Пользователь с id {user_id} ввел информацию о дате отъезда: ('{call.data[-10:]}')")
+                bot.edit_message_text(text=f'Вы выбрали  дату отъезда{call.data[-10:]}', chat_id=chat_id, message_id=call.message.id)
             else:
                 bot.answer_callback_query(callback_query_id=call.id,
                                           text='Дата выезда не должна быть больше даты заезда', show_alert=True)
+                logger.info(f"Пользователь с id {call.from_user.id} выбрал дату предшествующую либо равной дате заезда")
                 return
     get_check_out(user_id, chat_id)
 
 
 def callback_dates_month(call: CallbackQuery) -> None:
     """ Обработчик, который заменяет текущую клавиатуру на клавиатру с выбором дат месяца """
-    logger.info(f'start метода-обработчика callback_dates_month')
+    logger.info(f"Пользователь с id {call.from_user.id} перешел к выбору дат на календаре")
     bot.edit_message_reply_markup(chat_id=call.message.chat.id, message_id=call.message.id,
                                   reply_markup=calendar_days(datetime.strptime(call.data[-10:], '%Y-%m-%d')))
     bot.answer_callback_query(call.id)
@@ -55,7 +58,7 @@ def callback_dates_month(call: CallbackQuery) -> None:
 
 def callback_months(call: CallbackQuery) -> None:
     """ Обработчик, который заменяет текущую клавиатуру на клавиатру с выбором месяцев """
-    logger.info(f'start метода-обработчика callback_months')
+    logger.info(f"Пользователь с id {call.from_user.id} перешел к выбору месяца на календаре")
     bot.edit_message_reply_markup(chat_id=call.message.chat.id, message_id=call.message.id,
                                   reply_markup=calendar_months(call.data[-4:]))
     bot.answer_callback_query(call.id)
@@ -63,7 +66,7 @@ def callback_months(call: CallbackQuery) -> None:
 
 def callback_years(call: CallbackQuery) -> None:
     """ Обработчик, который заменяет текущую клавиатуру на клавиатру с выбором годов """
-    logger.info(f'start метода-обработчика callback_years')
+    logger.info(f"Пользователь с id {call.from_user.id} перешел к выбору года на календаре")
     bot.edit_message_reply_markup(chat_id=call.message.chat.id, message_id=call.message.id,
                                   reply_markup=calendar_years((call.data[-4:])))
 
